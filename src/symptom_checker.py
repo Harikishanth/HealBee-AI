@@ -278,14 +278,18 @@ class SymptomChecker:
             response_content = response_content[:-3]
         return response_content.strip()
 
-    def generate_preliminary_assessment(self) -> Dict[str, Any]:
+    def generate_preliminary_assessment(self, previous_symptoms_summary: Optional[str] = None) -> Dict[str, Any]:
         if not self.sarvam_client or not getattr(self.sarvam_client, 'api_key', None): # Check for client and its api_key
             print("🚨 Error: SarvamAPIClient not available or API key missing for assessment.")
             return self.DEFAULT_ASSESSMENT_ERROR.copy()
 
-        full_symptom_description = f"User's initial query: {self.nlu_result.original_text}\n\nDetails from follow-up questions:\n"
+        full_symptom_description = ""
+        if previous_symptoms_summary and previous_symptoms_summary.strip():
+            full_symptom_description += "PREVIOUSLY STATED IN THIS CONVERSATION (you MUST include ALL of these in your assessment — do not narrow to only the latest message):\n"
+            full_symptom_description += previous_symptoms_summary.strip() + "\n\n"
+        full_symptom_description += f"User's current message / latest query: {self.nlu_result.original_text}\n\nDetails from follow-up questions (this turn):\n"
         if not self.collected_symptom_details:
-            full_symptom_description += "No follow-up details were collected.\n"
+            full_symptom_description += "No follow-up details were collected for this turn.\n"
         else:
             for symptom_name, qa_pairs in self.collected_symptom_details.items(): # Keys are already lowercased
                 full_symptom_description += f"Symptom: {symptom_name}\n" # symptom_name is already lower from record_answer
@@ -295,12 +299,14 @@ class SymptomChecker:
         SYSTEM_PROMPT = """You are an AI Health Assistant. Your role is to provide preliminary, general information based ONLY on the user's stated symptoms and answers.
 DO NOT PROVIDE A MEDICAL DIAGNOSIS OR PRESCRIBE MEDICATION.
 Your response MUST be in JSON format, with the following exact keys: "assessment_summary", "suggested_severity", "recommended_next_steps", "potential_warnings", "disclaimer".
-- assessment_summary: A brief, easy-to-understand summary of potential implications of the symptoms (1-2 sentences). Use details the user already gave (e.g. duration, other symptoms); do not ask again for information already stated.
+CRITICAL — CUMULATIVE CONTEXT: You may receive "PREVIOUSLY STATED IN THIS CONVERSATION" and "User's current message". You MUST consider ALL symptoms from BOTH sections. Your assessment_summary must cover the FULL picture (all symptoms together), not just the latest message. Example: If earlier they said "fever for 2 days" and now "body ache", your summary must say "fever for 2 days along with body aches" and give a combined interpretation.
+
+- assessment_summary: A brief, easy-to-understand summary of potential implications of ALL the symptoms (1-2 sentences). Include every symptom and detail mentioned (previously + current). Use details the user already gave (e.g. duration, other symptoms); do not ask again for information already stated.
 - suggested_severity: A general indication like "Seems mild", "May require attention", or "Consider seeking medical advice promptly".
 - recommended_next_steps: General, safe next steps (e.g., "Monitor symptoms", "Rest and hydrate", "Consult a general physician if symptoms persist or worsen"). Provide as a numbered or bulleted list string.
 - potential_warnings: A list of strings for any specific observations from the user's input that might warrant closer attention, without being alarmist. If none, provide an empty list.
 - disclaimer: ALWAYS include this exact text: "This information is for general guidance only and is not a medical diagnosis. Please consult a qualified healthcare professional for any health concerns or before making any decisions related to your health."
-Keep your language empathetic and clear. Base your entire response on the user query that follows. Never ask for information the user has already provided (e.g. how long, what symptoms).
+Keep your language empathetic and clear. Base your entire response on ALL symptoms provided above. Never ask for information the user has already provided (e.g. how long, what symptoms). Never narrow the summary to only the latest complaint — always combine previously stated + current.
 """
         messages = [
             {"role": "system", "content": SYSTEM_PROMPT},

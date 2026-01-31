@@ -209,14 +209,16 @@ class HealBeeResponseGenerator:
         user_content = f"User query: \"{user_query}\"\nDetected language: {nlu_result.language_detected}\nNLU Intent: {nlu_result.intent.value}\nNLU Entities: {[e.text for e in nlu_result.entities]}"
         user_content += f"\n\nCONVERSATION STATE: {first_message_hint}"
         if nlu_result.intent == HealthIntent.SYMPTOM_QUERY:
-            user_content += "\n\n[SYMPTOM QUERY — Use entity-first thinking: extract KNOWN entities (symptoms, duration, severity, etc.) from this message and session context; mark UNKNOWN only what is not stated. NEVER ask about KNOWN entities. Give a brief assessment and practical steps; then ask at most ONE follow-up about an UNKNOWN, clinically relevant entity (e.g. pain type, body aches, progression). Do NOT ask 'How long have you had the fever?' if duration is already stated.]"
+            user_content += "\n\n[SYMPTOM QUERY — CUMULATIVE CONTEXT: Combine this message with ALL previously stated symptoms (see ACTIVE SYMPTOM SET). Your response MUST mention all active symptoms together and give a combined interpretation; do NOT narrow to only the latest complaint. Use entity-first thinking: extract KNOWN vs UNKNOWN; NEVER ask about KNOWN entities. Give a brief assessment and practical steps; then at most ONE follow-up about an UNKNOWN, clinically relevant entity. Do NOT ask 'How long have you had the fever?' if duration is already stated.]"
 
         if session_context:
             parts = []
             # ALREADY ANSWERED — instruct LLM never to ask these again
             already_lines = []
             if session_context.get("extracted_symptoms"):
-                parts.append(f"Previously mentioned symptoms in this session: {', '.join(session_context['extracted_symptoms'][:20])}")
+                sym_list = session_context["extracted_symptoms"][:20]
+                parts.append(f"ACTIVE SYMPTOM SET (cumulative — you MUST use ALL of these in your response; do not narrow to only the latest message): {', '.join(sym_list)}")
+                parts.append(f"Previously mentioned symptoms in this session: {', '.join(sym_list)}")
             if session_context.get("follow_up_answers"):
                 fa = session_context["follow_up_answers"][-10:]
                 parts.append("Follow-up answers from this session: " + "; ".join(

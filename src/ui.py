@@ -1567,8 +1567,22 @@ def main_ui():
             util = _get_utils(SARVAM_API_KEY)
             user_lang = st.session_state.current_language_code
             if st.session_state.symptom_checker_instance:
+                # Build cumulative context from session so assessment covers ALL symptoms (never reset)
+                prior_parts = []
+                extracted = list(st.session_state.get("extracted_symptoms") or [])
+                follow_answers = list(st.session_state.get("follow_up_answers") or [])
+                for fa in follow_answers:
+                    sn = (fa.get("symptom_name") or "").strip()
+                    ans = (fa.get("answer") or "").strip()[:150]
+                    if sn and ans:
+                        prior_parts.append(f"{sn}: {ans}")
+                if extracted:
+                    prior_parts.append("Symptoms mentioned in this conversation: " + ", ".join(str(s) for s in extracted[:15] if s))
+                previous_symptoms_summary = "; ".join(prior_parts) if prior_parts else None
                 with spinner_placeholder.info("Preparing a summary for you…"):
-                    assessment = st.session_state.symptom_checker_instance.generate_preliminary_assessment()
+                    assessment = st.session_state.symptom_checker_instance.generate_preliminary_assessment(
+                        previous_symptoms_summary=previous_symptoms_summary
+                    )
                     # Session memory: update extracted symptoms from symptom checker collected details
                     sc = st.session_state.symptom_checker_instance
                     for sym_name in (sc.collected_symptom_details or {}).keys():
