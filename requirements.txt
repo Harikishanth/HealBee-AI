@@ -9,5 +9,5 @@ pydub
 fuzzywuzzy
 textdistance
 streamlit-mic-recorder
-markdown
+Markdown==3.5.2
 supabase

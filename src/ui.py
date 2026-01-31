@@ -7,10 +7,7 @@ import numpy as np # For checking audio data (though not directly used in this v
 from dotenv import load_dotenv
 from typing import Optional
 import re
-try:
-    import markdown as md_lib
-except ImportError:
-    md_lib = None  # optional; app uses st.markdown and strip_markdown() only
+import markdown
 from streamlit_mic_recorder import mic_recorder
 import soundfile as sf
 import io
@@ -1229,8 +1226,7 @@ def main_ui():
                     # For user/system: escape HTML only.
                     if role == "assistant":
                         cleaned = clean_assistant_text(content)
-                        plain = strip_markdown(cleaned)
-                        content_safe = plain.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\n", "<br>")
+                        content_safe = markdown.markdown(cleaned)
                     else:
                         content_safe = (
                             content
