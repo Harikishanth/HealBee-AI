@@ -2,6 +2,7 @@ from dotenv import load_dotenv
 load_dotenv() # Load environment variables at the very beginning
 import json
 import os
+import re
 from typing import List, Dict, Optional, Any
 from enum import Enum # Required for HealthIntent placeholder
 
@@ -84,6 +85,61 @@ class SymptomChecker:
         if symptom_kb_path is None:
             symptom_kb_path = os.path.join(_PROJECT_ROOT, "src", "symptom_knowledge_base.json")
         self._load_symptom_kb(symptom_kb_path)
+        self._prefill_from_user_message()
+
+    def _prefill_from_user_message(self):
+        """
+        Pre-fill collected_symptom_details from the user's message so we do not ask
+        questions already answered (e.g. 'fever for 2 days' -> do not ask 'How long have you had the fever?').
+        """
+        if not self.symptom_kb:
+            return
+        text = (self.nlu_result.original_text or "").strip()
+        if not text:
+            return
+        text_lower = text.lower()
+        # Map keyword to KB symptom name (lower)
+        keyword_to_symptom = {}
+        for kb_name_lower, kb_data in self.symptom_kb.items():
+            keyword_to_symptom[kb_name_lower] = kb_name_lower
+            for kw in kb_data.get("keywords", []):
+                keyword_to_symptom[kw.lower()] = kb_name_lower
+        keyword_to_symptom["blocked"] = "cold"
+        keyword_to_symptom["nose"] = "cold"
+
+        # Pattern 1: "fever for 2 days", "cough for 3 days", "headache for 1 day"
+        for m in re.finditer(r"(fever|cough|headache|pain|cold|throat|stomach|nose|blocked)\s+for\s+(\d+)\s*day(s?)", text_lower, re.I):
+            symptom_hint, num, s = m.group(1).lower(), m.group(2), m.group(3) or "s"
+            duration_str = f"{num} day{s}"
+            symptom_key = keyword_to_symptom.get(symptom_hint)
+            if symptom_key and symptom_key in self.symptom_kb:
+                self._set_duration_answer(symptom_key, duration_str)
+
+        # Pattern 2: "for 2 days" or "for 2 days and now ..." — assign to first symptom in message
+        for m in re.finditer(r"for\s+(\d+)\s*day(s?)\s*(?:and|,|\.|now|then|\.\.\.)?", text_lower, re.I):
+            num, s = m.group(1), m.group(2) or "s"
+            duration_str = f"{num} day{s}"
+            for cand in ("fever", "cough", "headache", "cold"):
+                if cand in text_lower and cand in self.symptom_kb:
+                    self._set_duration_answer(cand, duration_str)
+                    break
+            else:
+                if "fever" in self.symptom_kb:
+                    self._set_duration_answer("fever", duration_str)
+                break
+
+    def _set_duration_answer(self, symptom_key: str, duration_str: str):
+        """Set the 'how long' answer for a symptom so we do not ask again."""
+        symptom_data = self.symptom_kb.get(symptom_key)
+        if not symptom_data:
+            return
+        for q in symptom_data.get("follow_up_questions", []):
+            if "how long" in q.lower():
+                if symptom_key not in self.collected_symptom_details:
+                    self.collected_symptom_details[symptom_key] = {}
+                self.collected_symptom_details[symptom_key][q] = duration_str
+                print(f"📝 Pre-filled from message: {symptom_key} / duration -> {duration_str}")
+                return
 
     def _load_symptom_kb(self, filepath: str):
         try:
@@ -239,12 +295,12 @@ class SymptomChecker:
         SYSTEM_PROMPT = """You are an AI Health Assistant. Your role is to provide preliminary, general information based ONLY on the user's stated symptoms and answers.
 DO NOT PROVIDE A MEDICAL DIAGNOSIS OR PRESCRIBE MEDICATION.
 Your response MUST be in JSON format, with the following exact keys: "assessment_summary", "suggested_severity", "recommended_next_steps", "potential_warnings", "disclaimer".
-- assessment_summary: A brief, easy-to-understand summary of potential implications of the symptoms (1-2 sentences).
+- assessment_summary: A brief, easy-to-understand summary of potential implications of the symptoms (1-2 sentences). Use details the user already gave (e.g. duration, other symptoms); do not ask again for information already stated.
 - suggested_severity: A general indication like "Seems mild", "May require attention", or "Consider seeking medical advice promptly".
 - recommended_next_steps: General, safe next steps (e.g., "Monitor symptoms", "Rest and hydrate", "Consult a general physician if symptoms persist or worsen"). Provide as a numbered or bulleted list string.
 - potential_warnings: A list of strings for any specific observations from the user's input that might warrant closer attention, without being alarmist. If none, provide an empty list.
 - disclaimer: ALWAYS include this exact text: "This information is for general guidance only and is not a medical diagnosis. Please consult a qualified healthcare professional for any health concerns or before making any decisions related to your health."
-Keep your language empathetic and clear. Base your entire response on the user query that follows.
+Keep your language empathetic and clear. Base your entire response on the user query that follows. Never ask for information the user has already provided (e.g. how long, what symptoms).
 """
         messages = [
             {"role": "system", "content": SYSTEM_PROMPT},

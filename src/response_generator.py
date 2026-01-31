@@ -194,9 +194,27 @@ class HealBeeResponseGenerator:
         # Layer 3: LLM-level response generation with system prompt including user_context
         print(f"💬 Generating response for query: '{user_query}' using LLM.")
 
+        # Conversation state: first message = no prior symptoms, follow-up answers, advice, or past messages
+        has_prior_context = bool(
+            session_context
+            and (
+                session_context.get("extracted_symptoms")
+                or session_context.get("follow_up_answers")
+                or session_context.get("last_advice_given")
+                or session_context.get("past_messages")
+            )
+        )
+        first_message_hint = "This is the FIRST message of this chat. A brief greeting is acceptable." if not has_prior_context else "This is NOT the first message. Do NOT greet (no Hello/Hi). Continue the conversation."
+
         user_content = f"User query: \"{user_query}\"\nDetected language: {nlu_result.language_detected}\nNLU Intent: {nlu_result.intent.value}\nNLU Entities: {[e.text for e in nlu_result.entities]}"
+        user_content += f"\n\nCONVERSATION STATE: {first_message_hint}"
+        if nlu_result.intent == HealthIntent.SYMPTOM_QUERY:
+            user_content += "\n\n[The user's message may already include duration or multiple symptoms. Do NOT ask for information they have already stated (e.g. do not ask 'How long have you had the fever?' if they said 'fever for 2 days'). Give a brief assessment and at most one new follow-up question if needed.]"
+
         if session_context:
             parts = []
+            # ALREADY ANSWERED — instruct LLM never to ask these again
+            already_lines = []
             if session_context.get("extracted_symptoms"):
                 parts.append(f"Previously mentioned symptoms in this session: {', '.join(session_context['extracted_symptoms'][:20])}")
             if session_context.get("follow_up_answers"):
@@ -204,6 +222,13 @@ class HealBeeResponseGenerator:
                 parts.append("Follow-up answers from this session: " + "; ".join(
                     f"{x.get('symptom_name', '')}: {x.get('answer', '')[:80]}" for x in fa
                 ))
+                for x in fa:
+                    q = (x.get("question") or "").strip()
+                    a = (x.get("answer") or "").strip()[:100]
+                    if q and a:
+                        already_lines.append(f"  - {q} → User already said: {a}")
+            if already_lines:
+                parts.append("ALREADY ANSWERED — DO NOT ASK AGAIN:\n" + "\n".join(already_lines))
             if session_context.get("last_advice_given"):
                 parts.append(f"Last advice given (summary): {session_context['last_advice_given'][:400]}")
             # User profile: for tone, follow-up relevance, continuity only; do NOT use for diagnosis or medical conclusions
