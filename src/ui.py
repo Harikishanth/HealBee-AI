@@ -1400,9 +1400,8 @@ def main_ui():
                             question_to_ask_raw = st.session_state.pending_symptom_question_data['question']
                             symptom_context_raw = st.session_state.pending_symptom_question_data['symptom_name']
                             question_to_ask_translated = util.translate_text(question_to_ask_raw, user_lang)
-                            symptom_context_translated = util.translate_text(symptom_context_raw, user_lang)
-                            add_message_to_conversation("assistant", f"{question_to_ask_translated}: {symptom_context_translated}")
-                            _persist_message_to_db("assistant", f"{question_to_ask_translated}: {symptom_context_translated}")
+                            add_message_to_conversation("assistant", question_to_ask_translated)
+                            _persist_message_to_db("assistant", question_to_ask_translated)
                         else:
                             generate_and_display_assessment()
                     else:
@@ -1462,9 +1461,8 @@ def main_ui():
                     question_to_ask_raw = st.session_state.pending_symptom_question_data['question']
                     symptom_context_raw = st.session_state.pending_symptom_question_data['symptom_name']
                     question_to_ask_translated = util.translate_text(question_to_ask_raw, user_lang)
-                    symptom_context_translated = util.translate_text(symptom_context_raw, user_lang)
-                    add_message_to_conversation("assistant", f"{symptom_context_translated}: {question_to_ask_translated}")
-                    _persist_message_to_db("assistant", f"{symptom_context_translated}: {question_to_ask_translated}")
+                    add_message_to_conversation("assistant", question_to_ask_translated)
+                    _persist_message_to_db("assistant", question_to_ask_translated)
                 else:
                     generate_and_display_assessment()
             else: 
