@@ -787,6 +787,21 @@ def markdown_to_html_safe(text: str) -> str:
     return s
 
 
+def strip_html_for_display(text: str) -> str:
+    """
+    Strip HTML tags and common entities so text is safe for chat titles and sidebar labels.
+    E.g. '<h4> Preliminary Health Assessment:</h4>' -> 'Preliminary Health Assessment:'.
+    """
+    if not text or not isinstance(text, str):
+        return (text or "").strip()
+    s = text
+    # Remove HTML tags (e.g. <h4>...</h4>, <br>, <strong>)
+    s = re.sub(r"<[^>]+>", " ", s)
+    # Collapse multiple spaces and strip
+    s = re.sub(r"\s+", " ", s).strip()
+    return s
+
+
 def strip_markdown(text: str) -> str:
     """
     Renders assistant content as plain text: no bold/italic, bullet prefixes, or emojis.
@@ -821,7 +836,9 @@ def _persist_message_to_db(role: str, content: str) -> None:
         uid = st.session_state.supabase_session.get("user_id")
         cid = st.session_state.get("current_chat_id")
         if cid is None:
-            title = (content[:50] + "…") if len(content) > 50 else (content or "Chat")
+            raw = (content or "Chat").strip()
+            plain = strip_html_for_display(raw)
+            title = (plain[:50] + "…") if len(plain) > 50 else (plain or "Chat")
             cid = chat_create(uid, title)
             if cid:
                 st.session_state.current_chat_id = cid
@@ -1178,7 +1195,8 @@ def main_ui():
                 chat_list_container = st.container(height=220)
                 with chat_list_container:
                     for c in st.session_state.chat_list:
-                        label = (c.get("title") or "Chat")[:40]
+                        raw_title = (c.get("title") or "Chat").strip()
+                        label = strip_html_for_display(raw_title)[:40]
                         if st.button(label, key=f"chat_{c.get('id')}", use_container_width=True):
                             try:
                                 msgs = messages_list(c["id"])
