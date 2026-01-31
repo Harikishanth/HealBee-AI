@@ -38,10 +38,12 @@ try:
         user_profile_upsert,
     )
     try:
-        from src.nominatim_places import search_nearby_health_places, make_osm_link
+        from src.nominatim_places import search_nearby_health_places, make_osm_link, search_nearby_by_gps, get_condition_hints_from_symptoms
     except ImportError:
         search_nearby_health_places = lambda loc, limit=8: []
         make_osm_link = lambda lat, lon: ""
+        search_nearby_by_gps = lambda lat, lon, **kw: []
+        get_condition_hints_from_symptoms = lambda s: ["hospital", "clinic"]
 except ImportError:
     import sys
     sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -83,10 +85,12 @@ except ImportError:
         user_profile_get = lambda uid: None
         user_profile_upsert = lambda uid, p: False
     try:
-        from src.nominatim_places import search_nearby_health_places, make_osm_link
+        from src.nominatim_places import search_nearby_health_places, make_osm_link, search_nearby_by_gps, get_condition_hints_from_symptoms
     except ImportError:
         search_nearby_health_places = lambda loc, limit=8: []
         make_osm_link = lambda lat, lon: ""
+        search_nearby_by_gps = lambda lat, lon, **kw: []
+        get_condition_hints_from_symptoms = lambda s: ["hospital", "clinic"]
 
 # --- Environment and API Key Setup ---
 # Priority: 1) .env (os.environ), 2) Streamlit Cloud secrets (st.secrets). No .streamlit/secrets.toml required locally.
@@ -175,12 +179,17 @@ if "persistent_memory" not in st.session_state:
     st.session_state.persistent_memory = {}  # key -> value from user_memory table
 
 # --- App UI navigation and UI language (separate from chatbot language) ---
-# Default to chat (no separate Home page; 4 tabs: Chatbot, Maps, Journal, Settings)
+# Default to chat (no separate Home page; 5 tabs: Chatbot, Maps, Journal, Reminders, Settings)
 if "active_page" not in st.session_state:
     st.session_state.active_page = "chat"
 # --- Journal: session-only notes (no DB) ---
 if "journal_entries" not in st.session_state:
     st.session_state.journal_entries = []
+# --- Reminders: session-only (no DB); list of {id, title, when_iso, note, done} ---
+if "reminders" not in st.session_state:
+    st.session_state.reminders = []
+if "reminders_show_add" not in st.session_state:
+    st.session_state.reminders_show_add = False
 if "app_language" not in st.session_state:
     st.session_state.app_language = "en"
 
@@ -221,6 +230,17 @@ UI_TEXT = {
         "chat_language_label": "Chat language",
         "note_title": "Title",
         "settings_caption_short": "This changes app labels only. Chat language is controlled in Chatbot.",
+        "reminders": "Reminders",
+        "reminders_title": "Health reminders",
+        "reminders_desc": "Medicine, check-ups, or anything you want to be reminded about. Shown in this session only.",
+        "add_reminder": "Add reminder",
+        "reminder_title": "What to remember",
+        "reminder_datetime": "Date & time",
+        "reminder_note": "Note (optional)",
+        "empty_reminders": "No reminders yet. Add one below.",
+        "delete": "Delete",
+        "mark_done": "Done",
+        "overdue": "overdue",
     },
     "ta": {
         "home": "முகப்பு",
@@ -253,6 +273,17 @@ UI_TEXT = {
         "open_map": "வரைபடத்தைத் திற",
         "results_for": "முடிவுகள்",
         "no_results": "அந்த பகுதிக்கு முடிவுகள் இல்லை. மற்றொரு நகரத்தை முயற்சிக்கவும்.",
+        "reminders": "நினைவூட்டல்கள்",
+        "reminders_title": "சுகாதார நினைவூட்டல்கள்",
+        "reminders_desc": "மருந்து, பரிசோதனை அல்லது நினைவில் வைக்க விரும்பும் எதையும். இந்த அமர்வில் மட்டுமே காட்டப்படும்.",
+        "add_reminder": "நினைவூட்டல் சேர்",
+        "reminder_title": "எதை நினைவில் வைக்க",
+        "reminder_datetime": "தேதி மற்றும் நேரம்",
+        "reminder_note": "குறிப்பு (விரும்பினால்)",
+        "empty_reminders": "இன்னும் நினைவூட்டல்கள் இல்லை. கீழே ஒன்றைச் சேர்க்கவும்.",
+        "delete": "அழி",
+        "mark_done": "முடிந்தது",
+        "overdue": "காலம் கடந்தது",
     },
     "ml": {
         "home": "ഹോം",
@@ -285,6 +316,17 @@ UI_TEXT = {
         "open_map": "മാപ്പ് തുറക്കുക",
         "results_for": "ഫലങ്ങൾ",
         "no_results": "ആ പ്രദേശത്ത് ഫലങ്ങൾ കണ്ടെത്തിയില്ല. മറ്റൊരു നഗരം ശ്രമിക്കുക.",
+        "reminders": "ഓർമ്മപ്പെടുത്തലുകൾ",
+        "reminders_title": "ആരോഗ്യ ഓർമ്മപ്പെടുത്തലുകൾ",
+        "reminders_desc": "മരുന്ന്, പരിശോധന അല്ലെങ്കിൽ ഓർക്കാൻ ആഗ്രഹിക്കുന്നത്. ഈ സെഷനിൽ മാത്രം കാണിക്കും.",
+        "add_reminder": "ഓർമ്മപ്പെടുത്തൽ ചേർക്കുക",
+        "reminder_title": "എന്ത് ഓർക്കണം",
+        "reminder_datetime": "തീയതി സമയം",
+        "reminder_note": "കുറിപ്പ് (ഓപ്ഷണൽ)",
+        "empty_reminders": "ഇതുവരെ ഓർമ്മപ്പെടുത്തലുകളില്ല. താഴെ ഒന്ന് ചേർക്കുക.",
+        "delete": "ഇല്ലാതാക്കുക",
+        "mark_done": "പൂർത്തി",
+        "overdue": "കാലഹരണപ്പെട്ടത്",
     },
     "te": {
         "home": "హోమ్",
@@ -317,6 +359,17 @@ UI_TEXT = {
         "open_map": "మ్యాప్ తెరవండి",
         "results_for": "ఫలితాలు",
         "no_results": "ఆ ప్రాంతానికి ఫలితాలు లేవు. మరొక నగరాన్ని ప్రయత్నించండి.",
+        "reminders": "జ్ఞాపకాలు",
+        "reminders_title": "ఆరోగ్య జ్ఞాపకాలు",
+        "reminders_desc": "మందులు, చెక్-అప్‌లు లేదా గుర్తుకు వచ్చేలా చేయాలనుకునేది. ఈ సెషన్‌లో మాత్రమే చూపిస్తాము.",
+        "add_reminder": "జ్ఞాపకం జోడించండి",
+        "reminder_title": "ఏమి గుర్తుపెట్టుకోవాలి",
+        "reminder_datetime": "తేదీ మరియు సమయం",
+        "reminder_note": "నోట్ (ఐచ్ఛికం)",
+        "empty_reminders": "ఇంకా జ్ఞాపకాలు లేవు. క్రింద ఒకటి జోడించండి.",
+        "delete": "తొలగించు",
+        "mark_done": "పూర్తయింది",
+        "overdue": "గడువు మించిన",
     },
     "hi": {
         "home": "होम",
@@ -349,6 +402,17 @@ UI_TEXT = {
         "open_map": "मानचित्र खोलें",
         "results_for": "परिणाम",
         "no_results": "उस क्षेत्र के लिए कोई परिणाम नहीं मिला। दूसरे शहर को आज़माएं।",
+        "reminders": "अनुस्मारक",
+        "reminders_title": "स्वास्थ्य अनुस्मारक",
+        "reminders_desc": "दवा, चेक-अप या जो भी याद दिलाना हो। सिर्फ इस सत्र में दिखेगा।",
+        "add_reminder": "अनुस्मारक जोड़ें",
+        "reminder_title": "क्या याद रखना है",
+        "reminder_datetime": "तारीख और समय",
+        "reminder_note": "नोट (वैकल्पिक)",
+        "empty_reminders": "अभी तक कोई अनुस्मारक नहीं। नीचे एक जोड़ें।",
+        "delete": "हटाएं",
+        "mark_done": "हो गया",
+        "overdue": "समय पार",
         "your_chats": "आपकी चैट",
         "chat_language_label": "चैट भाषा",
         "note_title": "शीर्षक",
@@ -385,6 +449,17 @@ UI_TEXT = {
         "open_map": "ನಕ್ಷೆ ತೆರೆಯಿರಿ",
         "results_for": "ಫಲಿತಾಂಶಗಳು",
         "no_results": "ಆ ಪ್ರದೇಶಕ್ಕೆ ಫಲಿತಾಂಶಗಳು ಕಂಡುಬಂದಿಲ್ಲ. ಇನ್ನೊಂದು ನಗರ ಪ್ರಯತ್ನಿಸಿ.",
+        "reminders": "ಜ್ಞಾಪನೆಗಳು",
+        "reminders_title": "ಆರೋಗ್ಯ ಜ್ಞಾಪನೆಗಳು",
+        "reminders_desc": "ಔಷಧಿ, ಚೆಕ್-ಅಪ್ ಅಥವಾ ನೆನಪಿಸಿಕೊಳ್ಳಲು ಬಯಸುವುದು. ಈ ಸೆಷನ್‌ನಲ್ಲಿ ಮಾತ್ರ ತೋರಿಸಲಾಗುತ್ತದೆ.",
+        "add_reminder": "ಜ್ಞಾಪನೆ ಸೇರಿಸಿ",
+        "reminder_title": "ಏನು ನೆನಪಿಡಬೇಕು",
+        "reminder_datetime": "ದಿನಾಂಕ ಮತ್ತು ಸಮಯ",
+        "reminder_note": "ನೋಟ್ (ಐಚ್ಛಿಕ)",
+        "empty_reminders": "ಇನ್ನೂ ಜ್ಞಾಪನೆಗಳಿಲ್ಲ. ಕೆಳಗೆ ಒಂದನ್ನು ಸೇರಿಸಿ.",
+        "delete": "ಅಳಿಸಿ",
+        "mark_done": "ಪೂರ್ಣ",
+        "overdue": "ಕಾಲ ಮೀರಿದ",
         "your_chats": "ನಿಮ್ಮ ಚಾಟ್‌ಗಳು",
         "chat_language_label": "ಚಾಟ್ ಭಾಷೆ",
         "note_title": "ಶೀರ್ಷಿಕೆ",
@@ -421,6 +496,17 @@ UI_TEXT = {
         "open_map": "नकाशा उघडा",
         "results_for": "निकाल",
         "no_results": "त्या क्षेत्रासाठी निकाल सापडले नाहीत. दुसरे शहर वापरून पहा.",
+        "reminders": "स्मरणपत्रे",
+        "reminders_title": "आरोग्य स्मरणपत्रे",
+        "reminders_desc": "औषध, तपासणी किंवा जे काही आठवण करून द्यायचे. फक्त या सत्रात दाखवले जाते.",
+        "add_reminder": "स्मरणपत्र जोडा",
+        "reminder_title": "काय आठवायचे",
+        "reminder_datetime": "तारीख आणि वेळ",
+        "reminder_note": "नोट (पर्यायी)",
+        "empty_reminders": "अद्याप स्मरणपत्रे नाहीत. खाली एक जोडा.",
+        "delete": "हटवा",
+        "mark_done": "झाले",
+        "overdue": "कालबाह्य",
         "your_chats": "तुमचे चॅट",
         "chat_language_label": "चॅट भाषा",
         "note_title": "शीर्षक",
@@ -457,6 +543,17 @@ UI_TEXT = {
         "open_map": "মানচিত্র খুলুন",
         "results_for": "ফলাফল",
         "no_results": "এই অঞ্চলের জন্য কোন ফলাফল নেই। অন্য শহর চেষ্টা করুন।",
+        "reminders": "অনুস্মারক",
+        "reminders_title": "স্বাস্থ্য অনুস্মারক",
+        "reminders_desc": "ওষুধ, চেক-আপ বা যা মনে রাখতে চান। শুধুমাত্র এই সেশনে দেখানো হয়।",
+        "add_reminder": "অনুস্মারক যোগ করুন",
+        "reminder_title": "কী মনে রাখতে হবে",
+        "reminder_datetime": "তারিখ ও সময়",
+        "reminder_note": "নোট (ঐচ্ছিক)",
+        "empty_reminders": "এখনও কোন অনুস্মারক নেই। নীচে একটি যোগ করুন।",
+        "delete": "মুছুন",
+        "mark_done": "সম্পন্ন",
+        "overdue": "সময় উত্তীর্ণ",
         "your_chats": "আপনার চ্যাট",
         "chat_language_label": "চ্যাট ভাষা",
         "note_title": "শিরোনাম",
@@ -771,6 +868,41 @@ def main_ui():
             /* Profile section: lighter labels, more breathing room */
             .healbee-profile-section { margin-top: 1rem; margin-bottom: 0.5rem; font-size: 0.9rem; color: var(--healbee-text); opacity: 0.9; font-weight: 500; }
             .healbee-profile-helper { font-size: 0.8rem; color: var(--healbee-text); opacity: 0.75; margin-top: 0.25rem; margin-bottom: 0.75rem; line-height: 1.4; }
+             /* ===============================
+   FORCE WHITE TEXT — PROFILE FIELDS ONLY
+   =============================== */
+
+/* Inputs, textareas, selectboxes inside Profile expander */
+[data-testid="stExpander"] input,
+[data-testid="stExpander"] textarea,
+[data-testid="stExpander"] [role="combobox"],
+[data-testid="stExpander"] [role="listbox"],
+[data-testid="stExpander"] [role="option"],
+[data-testid="stExpander"] div[data-baseweb="select"] *,
+[data-testid="stExpander"] div[data-baseweb="input"] *,
+[data-testid="stExpander"] div[data-baseweb="textarea"] * {
+    color: #ffffff !important;
+}
+
+/* Placeholder text */
+[data-testid="stExpander"] input::placeholder,
+[data-testid="stExpander"] textarea::placeholder {
+    color: rgba(255,255,255,0.7) !important;
+}
+
+/* Multiselect pills (Asthma, Hypertension etc.) */
+[data-testid="stExpander"] span[data-baseweb="tag"],
+[data-testid="stExpander"] span[data-baseweb="tag"] * {
+    color: #ffffff !important;
+    background-color: #475569 !important; /* neutral slate */
+    border-radius: 8px !important;
+}
+
+/* Dropdown menu background */
+[data-testid="stExpander"] [role="listbox"] {
+    background-color: #374151 !important;
+}
+
         </style>
     """
     st.markdown(theme_css, unsafe_allow_html=True)
@@ -844,15 +976,16 @@ def main_ui():
         except Exception:
             pass
 
-    # --- 2. TOP NAVIGATION BAR: 4 tabs, icons above text, active=soft green, inactive=white+gray ---
+    # --- 2. TOP NAVIGATION BAR: 5 tabs, icons above text, active=soft green, inactive=white+gray ---
     ap = st.session_state.active_page
     nav_pages = [
         ("chat", "💬", _t("chatbot")),
         ("maps", "🗺️", _t("maps")),
         ("journal", "📓", _t("journal")),
+        ("reminders", "⏰", _t("reminders")),
         ("settings", "⚙️", _t("settings")),
     ]
-    nav_cols = st.columns(4)
+    nav_cols = st.columns(5)
     for i, (page_key, icon, label) in enumerate(nav_pages):
         with nav_cols[i]:
             is_active = ap == page_key
@@ -921,23 +1054,15 @@ def main_ui():
         if selected_lang_display != st.session_state.current_language_display:
             st.session_state.current_language_display = selected_lang_display
             st.session_state.current_language_code = LANGUAGE_MAP[selected_lang_display]
-            st.session_state.conversation = []
-            st.session_state.symptom_checker_active = False
-            st.session_state.symptom_checker_instance = None
-            st.session_state.pending_symptom_question_data = None
-            st.session_state.voice_input_stage = None
-            # Reset session memory and user profile on language change
-            st.session_state.extracted_symptoms = []
-            st.session_state.follow_up_answers = []
-            st.session_state.last_advice_given = ""
-            st.session_state.user_profile = {}
+            # Keep same chat and context: do NOT clear conversation, current_chat_id, or profile.
+            # From now on, responses will be in the newly selected language.
             st.rerun()
 
         current_lang_code_for_query = st.session_state.current_language_code
         spinner_placeholder = st.empty()
 
         # --- User Profile: persistent in Supabase; loaded on login; used for context only, never diagnosis ---
-        PROFILE_CONDITIONS = ["Diabetes", "Hypertension (High BP)", "Asthma", "Heart condition", "Thyroid", "Kidney condition", "None"]
+        PROFILE_CONDITIONS = ["Diabetes", "Hypertension (High BP)", "Asthma", "Heart condition", "Thyroid", "Kidney condition", "Alzheimer's / Dementia", "Dandruff", "Hair fall", "Acne/Pimples", "Dry skin", "Dark spots/Pigmentation", "None"]
         profile = st.session_state.get("user_profile") or {}
         # Normalize allergies/conditions from DB (list) to form display (list or comma-separated)
         allergies_display = profile.get("allergies")
@@ -1027,6 +1152,12 @@ def main_ui():
             st.session_state.near_me_results = []
         if "near_me_query" not in st.session_state:
             st.session_state.near_me_query = ""
+        if "nearby_chat_results" not in st.session_state:
+            st.session_state.nearby_chat_results = []
+        if "user_gps_lat" not in st.session_state:
+            st.session_state.user_gps_lat = None
+        if "user_gps_lon" not in st.session_state:
+            st.session_state.user_gps_lon = None
         if False:  # hospital finder moved to Maps page
             if st.session_state.near_me_results:
                 st.markdown(f"**Results for “{st.session_state.near_me_query}”**")
@@ -1393,6 +1524,93 @@ def main_ui():
             st.markdown("<p class='healbee-disclaimer'>This is general guidance only, not a diagnosis. When in doubt, see a doctor.</p>", unsafe_allow_html=True)
             st.markdown("<div style='height: 8px;'></div>", unsafe_allow_html=True)
 
+            # --- Nearby hospitals/clinics by GPS (in user's chat language, within 10 km) ---
+            if len(st.session_state.get("conversation") or []) >= 1:
+                _user_lang = st.session_state.get("current_language_code") or "en-IN"
+                _util_nearby = _get_utils(SARVAM_API_KEY)
+                def _nearby_t(s: str) -> str:
+                    if not _util_nearby or _user_lang == "en-IN":
+                        return s
+                    try:
+                        return _util_nearby.translate_text(s, _user_lang) or s
+                    except Exception:
+                        return s
+                try:
+                    _qp = getattr(st, "query_params", None)
+                    if _qp is None:
+                        _qp = getattr(st, "experimental_get_query_params", lambda: {})()
+                    _lat_s = (_qp.get("lat") or [""])[0] if isinstance(_qp.get("lat"), list) else _qp.get("lat", "")
+                    _lon_s = (_qp.get("lon") or [""])[0] if isinstance(_qp.get("lon"), list) else _qp.get("lon", "")
+                    if _lat_s and _lon_s:
+                        _lat_f, _lon_f = float(_lat_s), float(_lon_s)
+                        if -90 <= _lat_f <= 90 and -180 <= _lon_f <= 180:
+                            _same = (st.session_state.user_gps_lat == _lat_f and st.session_state.user_gps_lon == _lon_f)
+                            if not _same:
+                                st.session_state.user_gps_lat = _lat_f
+                                st.session_state.user_gps_lon = _lon_f
+                                _hints = get_condition_hints_from_symptoms(st.session_state.get("extracted_symptoms") or [])
+                                _places = search_nearby_by_gps(_lat_f, _lon_f, radius_m=10000, condition_hints=_hints, limit=6)
+                                st.session_state.nearby_chat_results = _places
+                except Exception:
+                    pass
+                _expander_title = _nearby_t("Nearby hospitals/clinics for your concern (by your location)")
+                with st.expander(_expander_title, expanded=bool(st.session_state.get("nearby_chat_results"))):
+                    if st.session_state.get("nearby_chat_results"):
+                        st.caption(_nearby_t("Based on your conversation and your location (within 10 km). Call or visit the website to enquire. Data from OpenStreetMap."))
+                        _label_call = _nearby_t("Call")
+                        _label_website = _nearby_t("Website")
+                        _label_map = _nearby_t("Open map / directions")
+                        for i, p in enumerate(st.session_state.nearby_chat_results):
+                            name_raw = p.get("name") or "—"
+                            address_raw = (p.get("address") or "—")[:200]
+                            if _user_lang != "en-IN" and _util_nearby:
+                                try:
+                                    name_raw = _util_nearby.translate_text(name_raw, _user_lang) or name_raw
+                                    address_raw = _util_nearby.translate_text(address_raw, _user_lang) or address_raw
+                                except Exception:
+                                    pass
+                            name = name_raw.replace("<", "&lt;").replace(">", "&gt;")
+                            address = address_raw.replace("<", "&lt;").replace(">", "&gt;")
+                            phone = (p.get("phone") or "").strip()
+                            website = (p.get("website") or "").strip()
+                            lat, lon = p.get("lat"), p.get("lon")
+                            map_link = make_osm_link(str(lat or ""), str(lon or "")) if lat and lon else ""
+                            parts = [f"<strong>{name}</strong>", f"<span style='font-size:0.9rem;opacity:0.9;'>{address}</span>"]
+                            if phone:
+                                parts.append(f'{_label_call}: <a href="tel:{phone}">{phone}</a>')
+                            if website:
+                                wtext = website[:50] + ("…" if len(website) > 50 else "")
+                                parts.append(f'{_label_website}: <a href="{website}" target="_blank" rel="noopener">{wtext}</a>')
+                            if map_link:
+                                parts.append(f'<a href="{map_link}" target="_blank" rel="noopener">{_label_map}</a>')
+                            card_html = "<div class='healbee-card' style='margin-bottom:0.75rem;'><p style='margin:0 0 0.25rem 0;'>" + "</p><p style='margin:0.25rem 0;'>".join(parts) + "</p></div>"
+                            st.markdown(card_html, unsafe_allow_html=True)
+                    else:
+                        st.caption(_nearby_t("Use your device location to see 5–6 nearby hospitals/clinics (within 10 km) relevant to your concern. Your location is not stored."))
+                        _btn_text = _nearby_t("Use my location and find nearby places")
+                        _alert_no_geo = _nearby_t("Geolocation not supported")
+                        _alert_no_loc = _nearby_t("Could not get location. Allow location access and try again.")
+                        _btn_esc = _btn_text.replace("'", "\\'").replace('"', '\\"')
+                        _alert_no_geo_esc = _alert_no_geo.replace("'", "\\'").replace("\n", " ")
+                        _alert_no_loc_esc = _alert_no_loc.replace("'", "\\'").replace("\n", " ")
+                        _gps_html = f"""
+                        <script>
+                        function useLocation() {{
+                            if (!navigator.geolocation) {{ alert('{_alert_no_geo_esc}'); return; }}
+                            navigator.geolocation.getCurrentPosition(
+                                function(pos) {{
+                                    var u = window.location.origin + window.location.pathname + '?lat=' + pos.coords.latitude + '&lon=' + pos.coords.longitude;
+                                    window.location.href = u;
+                                }},
+                                function() {{ alert('{_alert_no_loc_esc}'); }}
+                            );
+                        }}
+                        </script>
+                        <button onclick="useLocation()" style="padding: 0.5rem 1rem; background: #0d9488; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 1rem;">{_btn_esc}</button>
+                        """
+                        components.html(_gps_html, height=60, scrolling=False)
+
+            st.markdown("<div style='height: 8px;'></div>", unsafe_allow_html=True)
             is_recording = st.session_state.voice_input_stage == "recording"
 
             if st.session_state.symptom_checker_active and st.session_state.pending_symptom_question_data:
@@ -1514,6 +1732,80 @@ def main_ui():
                         <div style="color: var(--healbee-text); line-height: 1.5;">{content}</div>
                     </div>
                 """, unsafe_allow_html=True)
+
+    elif st.session_state.active_page == "reminders":
+        st.subheader(_t("reminders_title"))
+        st.caption(_t("reminders_desc"))
+        reminders_list = st.session_state.get("reminders") or []
+        if st.session_state.get("reminders_show_add"):
+            rt = st.text_input(_t("reminder_title"), key="reminder_title_input", placeholder="e.g. Take medicine, Doctor visit")
+            rd = st.date_input(_t("reminder_datetime"), key="reminder_date_input", value=datetime.now().date())
+            rtime = st.time_input("Time", key="reminder_time_input", value=datetime.now().time())
+            rn = st.text_input(_t("reminder_note"), key="reminder_note_input", placeholder="Optional note")
+            rc1, rc2 = st.columns([1, 3])
+            with rc1:
+                if st.button(_t("save"), key="reminder_save_btn"):
+                    title_clean = (rt or "").strip() or "Reminder"
+                    when_iso = datetime(rd.year, rd.month, rd.day, rtime.hour, rtime.minute, rtime.second).isoformat()
+                    new_id = f"rem_{len(reminders_list)}_{datetime.now().timestamp()}"
+                    reminders_list.append({
+                        "id": new_id,
+                        "title": title_clean,
+                        "when_iso": when_iso,
+                        "note": (rn or "").strip(),
+                        "done": False,
+                    })
+                    st.session_state.reminders = reminders_list
+                    st.session_state.reminders_show_add = False
+                    for k in ("reminder_title_input", "reminder_note_input", "reminder_date_input", "reminder_time_input"):
+                        if k in st.session_state:
+                            del st.session_state[k]
+                    st.rerun()
+            with rc2:
+                if st.button(_t("cancel"), key="reminder_cancel_btn"):
+                    st.session_state.reminders_show_add = False
+                    st.rerun()
+        else:
+            if st.button("➕ " + _t("add_reminder"), key="reminders_add_btn"):
+                st.session_state.reminders_show_add = True
+                st.rerun()
+        if not reminders_list:
+            st.markdown("""<div class="healbee-card"><p style="color: var(--healbee-text); opacity: 0.9;">""" + _t("empty_reminders") + """</p></div>""", unsafe_allow_html=True)
+        else:
+            now = datetime.now()
+            for r in reminders_list:
+                when_str = r.get("when_iso", "")
+                try:
+                    when_dt = datetime.fromisoformat(when_str)
+                    when_display = when_dt.strftime("%d %b %Y, %I:%M %p")
+                    is_past = when_dt < now
+                except Exception:
+                    when_display = when_str or "—"
+                    is_past = False
+                title_safe = (r.get("title") or "—").replace("<", "&lt;").replace(">", "&gt;")
+                note_safe = (r.get("note") or "").replace("<", "&lt;").replace(">", "&gt;").replace("\n", " ")
+                rid = r.get("id", "")
+                done = r.get("done", False)
+                status = " ✓ " + _t("mark_done") if done else (" (" + _t("overdue") + ")" if is_past else "")
+                st.markdown(f"""
+                    <div class="healbee-card" style="margin-bottom: 0.75rem;">
+                        <div style="font-weight: 600; color: var(--healbee-text);">{title_safe}{status}</div>
+                        <div style="font-size: 0.85rem; color: var(--healbee-accent); margin-bottom: 0.25rem;">{when_display}</div>
+                        <div style="font-size: 0.85rem; color: var(--healbee-text); opacity: 0.9;">{note_safe}</div>
+                    </div>
+                """, unsafe_allow_html=True)
+                row1, row2 = st.columns([1, 4])
+                with row1:
+                    if st.button(_t("delete"), key=f"rem_del_{rid}"):
+                        st.session_state.reminders = [x for x in reminders_list if x.get("id") != rid]
+                        st.rerun()
+                with row2:
+                    if not done and st.button(_t("mark_done"), key=f"rem_done_{rid}"):
+                        for x in st.session_state.reminders:
+                            if x.get("id") == rid:
+                                x["done"] = True
+                                break
+                        st.rerun()
 
     elif st.session_state.active_page == "settings":
         st.subheader(_t("settings_title"))

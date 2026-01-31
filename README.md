@@ -1,261 +1,434 @@
-# Voice-Based Healthcare Q&A Application
+# HealBee
 
-## Abstract
-A voice-based search and Q&A system for disseminating reliable healthcare information in Indian languages, leveraging Sarvam-M through advanced prompt engineering for accuracy and safety.
+**A voice-based, multilingual AI health companion for accessible healthcare information.**
 
-## Overview
-This project, developed for DA 225o Deep Learning (Summer 2025), aims to provide accessible healthcare information to diverse Indian users through a voice interface, ensuring cultural relevance and safety.
+| | |
+|---|---|
+| **Web App** | **HealBee** |
+| **Author** | **Hari Kishanth R** |
+| **Contributors** | Vishnu Prasaath, Madheswaran, Kristen Sagayaraj |
 
-## Project Motivation
-Addresses the gap in reliable, language-accessible healthcare information in India, improving health literacy and awareness.
-Key challenges in the Indian healthcare landscape include a skewed doctor-patient ratio, limited access to qualified medical advice in remote and rural areas, and significant linguistic diversity. This project specifically aims to mitigate these by:
-*   Providing initial healthcare information and guidance in multiple Indian languages, reducing language as a barrier.
-*   Offering a first point of contact for common health queries, potentially reducing the load on overwhelmed healthcare professionals for non-critical issues.
-*   Improving health literacy by making information more understandable and accessible, particularly for users who might rely more on oral communication or have difficulty with text-based resources.
+[![Launch App](https://img.shields.io/badge/Launch_App-brightgreen?logo=streamlit&style=for-the-badge)](https://healbee-ai.streamlit.app/)
 
-## Key Features
-- Multi-language voice input/output (10 Indian languages).
-- AI-driven responses for general healthcare questions via prompt-engineered Sarvam-M.
-- Safety guardrails with disclaimers and emergency redirection.
-- Interactive Symptom Checker with Preliminary Triage Advice.
-- **Supabase** for optional login and persistent memory (chats, health context). Firebase has been intentionally removed; the app runs without any Firebase or `.streamlit/secrets.toml` locally.
+**Try it live:** [https://healbee-ai.streamlit.app/](https://healbee-ai.streamlit.app/)
 
-## Technologies Used
-- **Sarvam AI Platform**: Utilized for its comprehensive suite of AI services for Indian languages, including:
-    - **Speech-to-Text (STT)**: For converting user's voice input in various Indian languages into text. (Leveraging Sarvam AI's Saarika v2 STT or similar models).
-    - **Text-to-Speech (TTS)**: For synthesizing voice output from the generated text responses in a natural-sounding Indian voice.
-    - **Large Language Model (Sarvam-M)**: For Natural Language Understanding (NLU) to interpret user queries, and for generating responses through sophisticated prompt engineering techniques. Sarvam-M's capabilities in handling Indian languages and generating contextually relevant, conversational text are key to the application's core logic, including symptom assessment summaries and general health information.
+---
 
-## Application Flow
+## Tech Stack
 
-The following diagram illustrates the workflow of the application:
+| Layer | Technology | Purpose |
+|-------|------------|---------|
+| **Frontend / UI** | Streamlit | Single-page web app: Chatbot, Maps, Journal, Reminders, Settings. |
+| **AI / LLM / Voice** | Sarvam AI (Sarvam-M, STT, TTS) | NLU, response generation, speech-to-text and text-to-speech for Indian languages. |
+| **Backend / Auth / DB** | Supabase | Auth (email/password), PostgreSQL, RLS; chats, messages, user profile, conversation memory. |
+| **Maps & Places** | OpenStreetMap (Nominatim + Overpass API) | Geocoding by city/locality; GPS-based nearby hospitals/clinics within 10 km (no API key). |
+| **Runtime** | Python 3.11+ | Core app; dotenv, requests, numpy, scipy, soundfile, pydub, fuzzywuzzy, textdistance, streamlit-mic-recorder. |
+
+---
+
+## Table of Contents
+
+- [What is HealBee?](#what-is-healbee)
+- [Why HealBee?](#why-healbee)
+- [Who Is It For?](#who-is-it-for)
+- [Key Features (In Depth)](#key-features-in-depth)
+- [What Makes HealBee Different](#what-makes-healbee-different)
+- [Application Structure & User Journey](#application-structure--user-journey)
+- [How the Web App Works (Flow)](#how-the-web-app-works-flow)
+- [Architecture Diagram](#architecture-diagram)
+- [Technologies & Components](#technologies--components)
+- [Setup and Running](#setup-and-running)
+- [Configuration & Secrets](#configuration--secrets)
+- [Safety, Disclaimers & Limitations](#safety-disclaimers--limitations)
+- [Project Structure](#project-structure)
+- [Testing & Deployment](#testing--deployment)
+- [Future Work](#future-work)
+- [Credits & License](#credits--license)
+
+---
+
+## What is HealBee?
+
+**HealBee** is a **web application** that acts as a friendly, voice-enabled health companion. Users can ask health-related questions, describe symptoms, or seek wellness guidance in **multiple Indian languages**—via **text or voice**—and receive clear, contextual, and safety-aware responses. The app runs in the browser (Streamlit) and can optionally remember the user (login, chat history, profile) when Supabase is configured.
+
+**In short:**
+
+- **Voice + text** input in **8 Indian languages** (English, हिन्दी, தமிழ், മലയാളം, తెలుగు, ಕನ್ನಡ, मराठी, বাংলা).
+- **AI-powered** understanding and answers (Sarvam-M), with strict **no-diagnosis, no-prescription** guardrails.
+- **Interactive Symptom Checker** that asks follow-up questions and gives preliminary, triage-style guidance—never a diagnosis.
+- **Optional login** to save chats and a simple health profile for more relevant, continuous conversations.
+- **Maps**: search by city/locality; in Chatbot, **nearby hospitals/clinics by GPS** (within 10 km), tailored to your concern and shown in **your chosen chat language**.
+- **Journal** for quick session notes; **Reminders** for medicine, check-ups, or anything you want to remember (session-only).
+- **Switch chat language anytime** without losing the current conversation—continue in the same chat in a new language.
+
+HealBee is **not** a medical device, does **not** diagnose or prescribe, and is **not** a substitute for a doctor. It is a **first point of contact** for general health information and awareness, especially where language or access to information is a barrier.
+
+---
+
+## Why HealBee?
+
+In many parts of India (and similar contexts), people face:
+
+- **Language barriers** — Reliable health information is often only in English or a few languages.
+- **Limited first-point-of-contact** — It’s hard to get simple, initial guidance before deciding to visit a doctor.
+- **Low health literacy** — Complex or text-heavy resources are not accessible to everyone.
+- **Skewed doctor–patient ratio** — Doctors are overloaded; non-urgent queries could be partly addressed by safe, general information.
+
+HealBee aims to:
+
+- Reduce the **language barrier** by supporting multiple Indian languages and mixed language (e.g. Hinglish).
+- Provide a **friendly first touchpoint** for common health questions and symptom context.
+- Improve **health literacy** through clear, conversational answers and disclaimers.
+- **Never replace** a doctor—every response reinforces “see a doctor when in doubt” and includes appropriate disclaimers.
+
+---
+
+## Who Is It For?
+
+- **General users** who want quick, reliable health information in their language.
+- **Rural or low-connectivity users** who benefit from simple UI and optional voice.
+- **Multilingual households** who prefer to ask in Hindi, Tamil, Bengali, etc.
+- **Anyone** looking for preliminary symptom context (e.g. “What could fever with cough mean?”) without expecting a diagnosis.
+- **Developers / educators** who want to study or extend a voice-based, multilingual health Q&A system built with Streamlit, Sarvam AI, and Supabase.
+
+HealBee is **not** for: emergency care, diagnosis, prescription, or replacing a qualified healthcare provider.
+
+---
+
+## Key Features (In Depth)
+
+### 1. Voice & Multilingual Support
+
+- **Speech-to-Text (STT)** and **Text-to-Speech (TTS)** are powered by **Sarvam AI**, tuned for Indian languages and accents.
+- Users can **choose the chat language** (English, हिन्दी, தமிழ், മലയാളം, తెలుగు, ಕನ್ನಡ, मराठी, বাংলা). The AI responds in that language.
+- **Mixed language (e.g. Hinglish)** is supported: queries like “mujhe fever hai” are understood and processed.
+- **Voice input** in the web app uses the browser microphone (e.g. via `streamlit-mic-recorder`). On environments where local audio libraries are unavailable (e.g. Streamlit Cloud), the app still runs with browser-based voice.
+
+### 2. AI-Powered Chat
+
+- **Natural Language Understanding (NLU)** classifies the user’s intent (e.g. symptom query, general health question, greeting) and extracts entities (symptoms, body parts, etc.) using **Sarvam-M**.
+- **Response generation** uses the same LLM with carefully designed **system prompts** (`src/prompts.py`) so answers are helpful, cautious, and aligned with safety rules.
+- **Conversation memory**: within a session, the app keeps context (recent messages, last advice). With **Supabase** enabled, chat history and user profile persist across sessions.
+- **Language switch without new chat**: You can change the chat language (e.g. English → Tamil) mid-conversation; the **same chat continues** and new responses are in the newly selected language.
+
+### 3. Interactive Symptom Checker
+
+- **Trigger**: When the user describes symptoms (e.g. “I have fever and cough”), the NLU marks the intent as a symptom query and the **Symptom Checker** is activated.
+- **Follow-up questions**: The checker uses a structured **symptom knowledge base** (`symptom_knowledge_base.json`) to ask relevant follow-ups (e.g. duration, severity, other symptoms). Coverage includes digestive issues, fever/infections, skin & hair (dandruff, acne, dry skin, pigmentation), women’s health, child health, chronic conditions (e.g. blood sugar, blood pressure), neurological (e.g. Alzheimer’s), and seasonal issues (e.g. heat stroke, dengue-related triage).
+- **Preliminary assessment**: Once enough information is collected, the app sends a summary to **Sarvam-M** for a concise interpretation and suggested next steps, augmented with **rule-based triage points** from the knowledge base.
+- **Output**: The user gets a clear summary, severity indication, and recommendations—**always** with a disclaimer that this is **not a diagnosis** and that they should consult a doctor.
+
+### 4. Nearby Hospitals/Clinics (Chatbot + Maps)
+
+- **In Chatbot**: After you describe symptoms, an expander **“Nearby hospitals/clinics for your concern (by your location)”** appears. Click **“Use my location and find nearby places”** to share your device’s GPS (not stored). The app fetches **5–6 nearby hospitals/clinics within 10 km** from OpenStreetMap (Overpass API), **tailored to your concern** (e.g. dermatology for skin issues, cardiac for chest pain). Names, addresses, and all UI text are shown in **your selected chat language**. Each result includes phone, website, and “Open map / directions” when available.
+- **Maps page**: Enter a **city or locality**; the app uses **Nominatim** to search for hospitals, clinics, and pharmacies. Results show name, type, address, and a link to open directions in OpenStreetMap. No paid Google API is required.
+
+### 5. Optional User Profile
+
+- In the **Chatbot** page, an expander **“Your profile (optional)”** lets users share: name, age, gender, height, weight, ongoing conditions, allergies, pregnancy status (if applicable), and free-form notes.
+- This data is **only** used to tailor **tone and relevance** (e.g. age-appropriate language); it is **never** used for diagnosis or medical conclusions.
+- When **Supabase** is configured, the profile is stored securely and loaded on next login. Without Supabase, it is session-only.
+
+### 6. Journal (Session-Only)
+
+- The **Journal** page allows adding **health notes** (title + body). Notes are kept in **session only** by default (no database). Useful for quick scribbles during a session.
+
+### 7. Reminders (Session-Only)
+
+- The **Reminders** page lets you add **health reminders** (e.g. take medicine, doctor visit) with a **title**, **date & time**, and optional **note**. You can **mark as done** or **delete**. Reminders are **session-only** (not persisted to a database). The UI (including “overdue”) is shown in your **app language**. Ideal for in-session planning.
+
+### 8. Settings & Auth
+
+- **Settings** page: change **app language** (UI labels and navigation in 8 languages), with a note that **chat language** is set on the Chatbot page. When Supabase is enabled, **Logout** is available.
+- **Auth**: Optional **email/password** sign-in and registration via **Supabase**. When configured, users can have **multiple chats**, switch between them, and have profile and conversation memory persisted.
+
+---
+
+## What Makes HealBee Different
+
+- **True multilingual chat**: Not just UI translation—the **AI responds in the user’s chosen language** (8 Indian languages), and **hospital/clinic results** from OpenStreetMap are translated into that language too.
+- **Same chat, new language**: Change the chat language mid-conversation without losing history; the conversation continues and new replies are in the new language.
+- **Location-aware, concern-aware help**: In the Chatbot, **nearby hospitals/clinics within 10 km** are fetched by **GPS**, tailored to the **current symptom/condition** (e.g. dermatology for skin issues), with names and addresses in the user’s language—no extra API keys.
+- **Voice + text** with **Sarvam AI** tuned for Indian languages and accents.
+- **Structured symptom checker** with follow-up questions and triage-style guidance (never diagnosis), backed by an extensible knowledge base.
+- **Optional profile and persistence** (Supabase) for continuous, personalized conversations without locking out users who prefer not to sign in.
+- **Reminders** and **Journal** in-app for quick health-related notes and planning (session-only by design for simplicity).
+
+---
+
+## Application Structure & User Journey
+
+The web app has **five main areas** (tabs/pages):
+
+| Page | What the user sees and does |
+|------|-----------------------------|
+| **Chatbot** | Welcome and disclaimers; chat language selector; optional “Your profile” expander; list of past chats (if logged in); current conversation with HealBee; voice and text input; **Nearby hospitals/clinics** expander (by GPS, within 10 km, in your language); feedback option. |
+| **Maps** | Search box for city/locality; “Search” button; list of nearby health places with addresses and “Open map” links. |
+| **Journal** | Title and notes fields to add a health note; list of session notes (session-only). |
+| **Reminders** | Add reminder (title, date & time, note); list of reminders with “Done” and “Delete”; session-only. |
+| **Settings** | App language dropdown; short caption; Logout button (if Supabase is configured). |
+
+**Typical user journey (Chatbot):**
+
+1. User opens the app → sees welcome and disclaimers.
+2. Optionally signs in (if Supabase is set) and/or opens “Your profile” to add basic info.
+3. Selects **chat language** (e.g. Tamil).
+4. Types or speaks a question (e.g. “I have fever from two days”).
+5. App runs STT (if voice), then NLU → either **Symptom Checker** (follow-up questions + assessment) or **direct answer** from Sarvam-M.
+6. User can **switch chat language** (e.g. to Hindi)—same chat continues; new responses in Hindi.
+7. **Nearby hospitals/clinics** expander appears; user can click “Use my location…” to see 5–6 places within 10 km, in their language, relevant to their concern.
+
+---
+
+## How the Web App Works (Flow)
+
+High-level flow from user input to response:
 
 ```mermaid
 graph TD
-    A[User Voice Input] --> B[STT Engine]
-    B --> C[Text Query]
-    C --> D[Sarvam-M: NLU]
-
-    subgraph Symptom Checker Flow
-        direction LR
-        D --> |Intent: SYMPTOM_QUERY| SC1[Initialize SymptomChecker]
-        SC1 --> SC2{Has Follow-up Questions?}
-        SC2 -- Yes --> SC3[Ask Follow-up Question]
-        SC3 --> SC4[User Voice Answer]
-        SC4 --> SC5[STT for Answer]
-        SC5 --> SC6[Record Answer in SymptomChecker]
-        SC6 --> SC2
-        SC2 -- No --> SC7["Generate Preliminary Assessment (Sarvam-M + KB Triage Points)"]
-        SC7 --> AssessmentText[Assessment Text]
-    end
-
-    subgraph Standard Query Flow
-        direction LR
-        D --> |Other Intents| F[Sarvam-M: Answer Generation via Prompt Engineering]
-        F --> StandardText[Standard Answer Text]
-    end
-
-    AssessmentText --> G[Safety Layer]
-    StandardText --> G[Safety Layer]
-    G --> |Validate/Redirect| H[TTS Engine]
-    H --> I[Voice Output with Disclaimer]
+    A[User: Voice or Text] --> B[STT if voice]
+    B --> C[Text query]
+    C --> D[NLU: Sarvam-M]
+    D --> E{Intent?}
+    E -->|Symptom query| F[Symptom Checker]
+    F --> G[Follow-up Q&A]
+    G --> H[Preliminary assessment + triage]
+    E -->|Other| I[Response Generator]
+    I --> J[Sarvam-M answer]
+    H --> K[Safety layer]
+    J --> K
+    K --> L[Disclaimer + output]
+    L --> M[Translate to chat language]
+    M --> N[Nearby places by GPS if in chat]
+    N --> O[User sees/hears response]
 ```
 
-## System Architecture Overview
+- **STT**: Voice → text (Sarvam).
+- **NLU**: Text → intent + entities (Sarvam-M).
+- **Symptom path**: Follow-up questions from knowledge base → summary → LLM + triage rules → assessment + disclaimer.
+- **General path**: Prompt built from query + NLU → Sarvam-M → answer + disclaimer.
+- **Safety layer**: Ensures disclaimers, blocks diagnosis/prescription, and can redirect to “see a doctor” or emergency messaging.
+- **Output**: Translated to user’s chat language; in Chatbot, nearby hospitals/clinics (GPS, 10 km, user’s language) when location is shared.
 
-The application integrates several key components to deliver a voice-based healthcare Q&A experience:
+All of this is orchestrated in the **Streamlit UI** (`src/ui.py`), which calls into `nlu_processor`, `symptom_checker`, `response_generator`, `nominatim_places` (Nominatim + Overpass), and Supabase client as needed.
 
-1.  **Voice Interface (STT/TTS)**: User interacts via voice. Sarvam AI services handle speech-to-text conversion of the user's query and text-to-speech for delivering the system's response.
-2.  **NLU Processor (`nlu_processor.py`)**: The transcribed text query is processed by Sarvam-M to identify the user's intent (e.g., asking about a disease, describing symptoms) and extract relevant medical entities (symptoms, diseases, etc.).
-3.  **Core Logic Orchestration (`main.py`)**: This script orchestrates the overall flow. Based on the NLU output, it decides whether to invoke the Symptom Checker or the standard prompt-based Q&A flow.
-4.  **Symptom Checker (`symptom_checker.py`)**:
-    *   If activated, this module manages an interactive dialogue to gather more details about the user's symptoms using predefined questions from `symptom_knowledge_base.json`.
-    *   It then compiles this information and uses Sarvam-M to generate a preliminary assessment, which is further augmented by rule-based triage points from the local knowledge base.
-5.  **Response Generation (Standard Queries - `response_generator.py`)**:
-    *   For non-symptom related health queries, `response_generator.py` constructs a detailed prompt using the user's query and NLU output.
-    *   This prompt is then sent to Sarvam-M, which generates an informed answer based on its general knowledge and the guidance provided in the system prompt (see `src/prompts.py`). This process relies on effective prompt engineering rather than external knowledge base retrieval for general queries.
-6.  **Safety Layer**: All generated responses (from Symptom Checker or standard query responses) pass through a safety layer. This includes hardcoded checks for emergencies or diagnosis requests and ensures appropriate disclaimers are appended.
-7.  **Knowledge Bases**:
-    *   `symptom_knowledge_base.json`: A structured JSON file defining symptoms, keywords, follow-up questions, and basic triage points for the Symptom Checker.
+---
 
-## Symptom Checker and Triage
+## Architecture Diagram
 
-The application includes an interactive symptom checker to help users understand potential implications of their symptoms and receive general guidance.
+The diagram below shows how HealBee is structured: from the user in the browser, through the frontend and data layer, to the API and AI/safety layer.
 
-**How it works:**
-1.  **Activation**: If the NLU module identifies a user's query as relating to symptoms (e.g., "I have a fever and a cough"), the Symptom Checker is activated.
-2.  **Interactive Q&A**: The checker may ask a series of follow-up questions based on the initially reported symptoms. These questions are drawn from the `symptom_knowledge_base.json` file. This step is interactive, requiring further voice input from the user for each question.
-3.  **Preliminary Assessment**: Once sufficient information is gathered, the Symptom Checker generates a preliminary assessment. This involves:
-    *   Sending the collected symptom details (initial query + answers to follow-ups) to the Sarvam-M model for a summarized interpretation and suggested next steps.
-    *   Augmenting this with relevant `basic_triage_points` from the `symptom_knowledge_base.json`.
-4.  **Output**: The user receives this assessment, which includes a summary, suggested severity, recommended general next steps, potential warnings, and relevant triage points from the knowledge base.
+![HealBee Architecture](docs/architecture.png)
 
-**Important Disclaimer**: The information provided by the symptom checker is for general guidance only and is **not a medical diagnosis**. Users are always advised to consult a qualified healthcare professional for any health concerns or before making any decisions related to their health. This disclaimer is consistently provided with any assessment.
+*Place the architecture diagram image at `docs/architecture.png` so it appears above. The diagram illustrates:*
+
+| Layer | What it covers |
+|-------|----------------|
+| **User** | Access via **mobile or desktop browser** — cross-platform. |
+| **Frontend** | **Auth screen** (login/sign-up), **UI & layout** (Chatbot, Maps, Journal, Reminders, Settings), **voice/text input**, **chat & app language selectors**. |
+| **Data & Identity** | **Supabase Auth** (sign-in/sign-up), **user profiles** (optional health context), **conversation history** (chats, messages). |
+| **API / Session Layer** | **Request handling** (receives and routes requests), **session & context** (conversation state, language, extracted symptoms), **personalization** (profile and history for tone and relevance). |
+| **AI & Safety Layer** | **STT** (speech-to-text), **NLU / intent system** (query and entities), **knowledge base** (symptom checker + prompts), **safety & guardrails** (disclaimers, no diagnosis/prescription), **TTS** (text-to-speech). |
+| **Places & Maps** | **Nominatim** (city/locality search), **Overpass** (GPS-based nearby hospitals/clinics within 10 km, condition-aware). |
+
+**Flow:** User input (voice or text) goes from the **Frontend** to the **API/Session Layer**, which talks to **Data & Identity** for auth and context. The **AI & Safety Layer** runs STT → NLU → knowledge/LLM → safety checks → output in user’s language. **Places & Maps** is used for Maps page and for the Chatbot’s “nearby hospitals/clinics” (Overpass by GPS). The response is personalized and sent back to the user; conversation history is updated in **Data & Identity**.
+
+---
+
+## Technologies & Components
+
+### Core Stack (Summary)
+
+| Layer | Technology | Purpose |
+|-------|------------|---------|
+| **UI** | Streamlit | Single-page web app: Chatbot, Maps, Journal, Reminders, Settings. |
+| **AI / LLM** | Sarvam AI (Sarvam-M, STT, TTS) | NLU, response generation, voice in/out. |
+| **Backend / Auth / DB** | Supabase | Auth (email/password), PostgreSQL, RLS; chats, messages, user memory, user profile. |
+| **Maps & Nearby** | Nominatim + Overpass (OpenStreetMap) | Geocoding by city; GPS-based nearby hospitals/clinics within 10 km, condition hints. |
+
+### Main Components (Code)
+
+| File / Component | Responsibility |
+|------------------|----------------|
+| `src/ui.py` | Streamlit app: navigation (5 pages), Chatbot (chat, profile, language, nearby-by-GPS), Maps, Journal, Reminders, Settings, auth gate, theme and styling. |
+| `src/nlu_processor.py` | Intent detection and entity extraction using Sarvam-M; Hinglish and config-driven behaviour. |
+| `src/response_generator.py` | Builds prompts and calls Sarvam-M for non-symptom queries. |
+| `src/symptom_checker.py` | Manages symptom flow: follow-up questions, state, assessment generation, triage. |
+| `src/prompts.py` | System and safety prompts for the LLM. |
+| `src/supabase_client.py` | Auth (sign-in, sign-up, sign-out), chats, messages, user memory, user profile. |
+| `src/nominatim_places.py` | Nominatim: geocoding and “nearby health places” by city. Overpass: GPS-based search within radius (10 km), condition hints, phone/website when available. |
+| `src/utils.py` | Shared helpers (e.g. translation via Sarvam for chat language). |
+| `src/audio_capture.py` | Optional local audio capture; degrades gracefully when PortAudio is missing (e.g. Streamlit Cloud). |
+| `symptom_knowledge_base.json` | Symptoms, keywords, follow-up questions, triage points. |
+| `nlu_config.json`, `hinglish_symptoms.json`, `common_misspellings.json` | NLU and text normalization config. |
+
+### Data & Safety Principles
+
+- **No Firebase**; only Supabase, Sarvam, and OpenStreetMap (Nominatim/Overpass).
+- **No diagnosis or prescription**; all content is general guidance with disclaimers.
+- **Safety layer**: Emergency and diagnosis-request handling; responses steer users to doctors when needed.
+- **Profile and memory**: Used only for personalization of tone and context, never for medical conclusions.
+
+---
+
+## Setup and Running
+
+### Prerequisites
+
+- **Python 3.11+**
+- **Git** (optional, for cloning)
+
+### Steps
+
+1. **Clone and enter the project**:
+   ```bash
+   git clone <repository-url>
+   cd HealHub
+   ```
+
+2. **Create and activate a virtual environment**:
+   ```bash
+   python -m venv venv
+   venv\Scripts\activate          # Windows
+   # source venv/bin/activate     # macOS / Linux
+   ```
+
+3. **Install dependencies**:
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+4. **Configure environment** (see [Configuration & Secrets](#configuration--secrets)):
+   - Copy `.env.example` to `.env`.
+   - Set at least `SARVAM_API_KEY`.
+
+5. **Run the web app**:
+   ```bash
+   streamlit run src/ui.py
+   ```
+   Open the URL shown (e.g. `http://localhost:8501`).
+
+**CLI (backend-only testing):** `python main.py` — uses mock STT and exercises core logic without the full UI.
+
+---
+
+## Configuration & Secrets
+
+### Environment Variables (`.env`)
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `SARVAM_API_KEY` | **Yes** | From [Sarvam AI dashboard](https://dashboard.sarvam.ai). Used for NLU, responses, STT, TTS. |
+| `SUPABASE_URL` | No | Supabase project URL. Enables login and persistence. |
+| `SUPABASE_ANON_KEY` | No | Supabase anon key. Enables login and persistence. |
+
+- **Local:** Use `.env`; no `.streamlit/secrets.toml` required.
+- **Streamlit Cloud:** In **Settings → Secrets**, add the same variables. The app reads from `st.secrets` when available.
+
+### Optional: Supabase
+
+1. Create a project at [Supabase](https://supabase.com).
+2. Run `supabase_schema.sql` in the SQL Editor (creates tables and RLS).
+3. Add `SUPABASE_URL` and `SUPABASE_ANON_KEY` to `.env` or Cloud Secrets.
+4. Restart the app; Login/Register and persistence will be available.
+
+---
+
+## Safety, Disclaimers & Limitations
+
+### What HealBee Does Not Do
+
+- Does **not** diagnose any condition.
+- Does **not** prescribe or recommend specific medications.
+- Does **not** replace a doctor or emergency care.
+
+### What HealBee Does
+
+- Provides **general health information** and wellness guidance.
+- Offers **preliminary, non-diagnostic** symptom context and triage-style suggestions.
+- Encourages users to **consult a qualified healthcare professional** and seek **emergency care** when appropriate.
+- Applies **disclaimers** and **safety guardrails** (e.g. emergency detection, diagnosis-request handling).
+
+### Limitations
+
+- **STT/NLU** quality depends on accent, noise, and language mix.
+- **Symptom coverage** is limited by the knowledge base and LLM; complex or rare cases may not be fully captured.
+- **LLM** can occasionally be wrong or irrelevant; prompts and safety layers mitigate this.
+- **Journal** and **Reminders** are session-only unless extended.
+- **Voice** in the browser typically needs HTTPS and microphone permission.
+- **Nearby places** depend on OpenStreetMap data; coverage and accuracy vary by region.
+
+---
 
 ## Project Structure
 
-- `main.py`: Main application script to run the voice-based Q&A.
-- `src/`: Contains the core application logic.
-    - `nlu_processor.py`: Handles Natural Language Understanding using Sarvam-M.
-    - `nlu_config.json`: Configuration for intent detection and entity extraction
-    - `hinglish_symptoms.json`: Hinglish symptom mappings for hybrid language support
-    - `common_misspellings.json`: Common misspellings dictionary for text normalization
-    - `prompts.py`: Defines system prompt used by Sarvam-M for response generation
-    - `response_generator.py`: Generates responses for standard queries using prompt engineering with Sarvam-M, guided by NLU output.
-    - `symptom_checker.py`: Module for interactive symptom analysis and assessment generation.
-    - `symptom_knowledge_base.json`: Configuration file for symptoms, keywords, and follow-up questions.
-    - `audio_capture.py`: (Placeholder/Actual) For audio input and STT integration.
-    - `tts_service.py`: (Placeholder/Actual) For Text-to-Speech integration.
-    - `utils.py`: Utility/helper functions used across modules
-- `tests/`: Unit and evaluation tests for various components.
-    - `test_nlu_corrections.py`: Tests for NLU correction logic and normalization.
-    - `test_nlu_hinglish.py`: Tests Hinglish input parsing and understanding.
-    - `test_evaluation.py`: Evaluates overall system outputs vs expected responses.
-    - `evaluation_results_metrics.json`: JSON log of evaluation metrics and results
-- `.env`: Stores API keys and other environment variables (not tracked by Git). Copy from `.env.example` and fill in your values.
-- `.env.example`: Template listing required and optional env vars (no secrets; safe to commit).
-- `requirements.txt`: Lists project dependencies.
-- `README.md`: This file.
-
-## Setup and Usage
-
-### Prerequisites
-*   Ensure Python 3.10+ is installed.
-*   Clone the repository: `git clone <repository-url>`
-*   Navigate to the project directory: `cd healbee_project` (or whatever you named the repo folder)
-*   Create a Python virtual environment (recommended):
-    ```bash
-    python -m venv venv
-    source venv/bin/activate  # On Windows: venv\Scripts\activate
-    ```
-*   Install dependencies:
-    ```bash
-    pip install -r requirements.txt
-    ```
-*   Create a `.env` file in the project root: copy `.env.example` to `.env`, then set your Sarvam API key (and optionally Supabase URL/key for login). Example:
-    ```env
-    SARVAM_API_KEY="your_actual_api_key_here"
-    ```
-    *(Sarvam key obtainable from the [Sarvam AI dashboard](https://dashboard.sarvam.ai).)*  
-    **No `.streamlit/secrets.toml` is required for local run.** For deployment on Streamlit Cloud, add the same keys in the app’s **Settings → Secrets**.
-
-### Running the Application (Streamlit UI)
-The primary way to interact with the application is through the Streamlit UI. From the folder that contains the project (e.g. `HealBee`), run:
-```bash
-cd healbee_project
-streamlit run src/ui.py
 ```
-Open your browser and go to `http://localhost:8501` (or the URL provided by Streamlit).
-
-### CLI Mode (Core Logic Testing)
-The `main.py` script offers a command-line interface, mainly for testing the core backend logic. It uses a mock STT by default and has limited interactivity compared to the Streamlit UI.
-```bash
-python main.py
+HealHub/
+├── main.py                     # CLI entry for core logic testing
+├── requirements.txt            # Python dependencies
+├── pyproject.toml              # Project metadata
+├── .env.example                # Env template (no secrets)
+├── README.md                   # This file
+├── supabase_schema.sql         # Supabase schema and RLS
+├── docs/
+│   └── architecture.png        # Place architecture diagram here
+├── src/
+│   ├── ui.py                   # Streamlit web app (5 pages)
+│   ├── nlu_processor.py         # NLU (Sarvam-M)
+│   ├── response_generator.py  # General Q&A responses
+│   ├── symptom_checker.py      # Symptom flow and assessment
+│   ├── prompts.py              # System/safety prompts
+│   ├── supabase_client.py      # Auth, chats, profile, memory
+│   ├── nominatim_places.py     # Maps (Nominatim + Overpass)
+│   ├── audio_capture.py        # Optional local audio
+│   ├── utils.py                # Shared utilities
+│   ├── nlu_config.json
+│   ├── symptom_knowledge_base.json
+│   ├── hinglish_symptoms.json
+│   └── common_misspellings.json
+└── tests/
+    ├── test_nlu_corrections.py
+    ├── test_nlu_hinglish.py
+    ├── test_evaluation.py
+    └── test_data/
 ```
 
-### Important Notes for Voice Input:
+---
 
-*   **Microphone Permissions**: Users will need to grant microphone permissions to their browser for the voice input feature to work.
-*   **HTTPS Required**: For browsers to allow microphone access, the application must be served over HTTPS. Streamlit Community Cloud provides this by default. If you are self-hosting in a way that results in an HTTP URL, voice input might not work on many browsers. Localhost is often an exception.
+## Testing & Deployment
 
-### Optional: Auth & Persistent Memory (Supabase)
+- **Testing:** See **TESTING.md** for NLU, Hinglish, and evaluation tests.
+- **Live app:** [https://healbee-ai.streamlit.app/](https://healbee-ai.streamlit.app/)
+- **Deployment (Streamlit Community Cloud):**
+  1. Push repo to GitHub and connect to [Streamlit Community Cloud](https://share.streamlit.io/).
+  2. Set **Main file path** to `src/ui.py`.
+  3. Add **Secrets**: `SARVAM_API_KEY` (required), optionally `SUPABASE_URL`, `SUPABASE_ANON_KEY`.
+  4. Deploy; app runs as `streamlit run src/ui.py`.
 
-HealBee uses **Supabase** as the only backend for auth and persistence (Firebase has been removed).
+On Streamlit Cloud, browser-based voice works; local `sounddevice` is optional and disabled when PortAudio is unavailable.
 
-To enable login, multiple chats, and health context across sessions:
-
-1. Create a [Supabase](https://supabase.com) project and get **Project URL** and **anon public** key.
-2. Add to `.env` (local) or to **Streamlit Cloud → Settings → Secrets** (deployment):
-   ```env
-   SUPABASE_URL="https://your-project.supabase.co"
-   SUPABASE_ANON_KEY="your_anon_key"
-   ```
-3. In the Supabase SQL Editor, run the schema in `supabase_schema.sql` (creates `chats`, `messages`, `user_memory` tables and RLS).
-4. Restart the app; you will see Login/Register. Without these vars, the app runs in **session-only mode** (no login, no persistence).
-
-**Why Supabase over Firebase:** HealBee uses Supabase for auth and persistent memory to keep a single, simple backend (PostgreSQL + Row Level Security), avoid vendor lock-in to Google, and align with Streamlit-friendly deployment. Feedback buttons still appear; feedback is acknowledged in the UI but not persisted to any external service.
-
-## HealBee – Demo
-
-### Quick Preview (GIF)
-
-![App Preview](demo/demo.gif)
-
-> Quick visual demo of the app (silent preview).
-
-
-### Deploying on Streamlit Cloud
-
-1. Push your repo to GitHub and connect it to [Streamlit Community Cloud](https://share.streamlit.io/).
-2. In the app **Settings → Secrets**, add:
-   - `SARVAM_API_KEY` (required)
-   - `SUPABASE_URL` and `SUPABASE_ANON_KEY` (optional; omit for session-only mode).
-3. No `.streamlit/secrets.toml` file is required; secrets are set in the Cloud dashboard.
-4. Run command: `streamlit run src/ui.py`.
-
-### Try It Live on Streamlit
-
-[![Launch App](https://img.shields.io/badge/🚀_Launch_App-brightgreen?logo=streamlit&style=for-the-badge)](https://healhuub.streamlit.app/)
-
-> Open in your browser — no setup needed. Allow microphone access when prompted.
-
-## Test Evaluations
-See TESTING.md
-
-## Limitations
-
-While this application aims to provide useful healthcare information, it has several limitations:
-
-*   **Not a Diagnostic Tool**: The system, including the Symptom Checker, cannot provide medical diagnoses or replace consultation with qualified healthcare professionals. It offers general guidance only.
-*   **Accuracy of STT/NLU**: The quality of the interaction heavily depends on the accuracy of the Speech-to-Text and Natural Language Understanding components, especially with diverse accents and complex queries.
-*   **Knowledge Base Scope**: The effectiveness of responses for general queries depends on the LLM's training data, as RAG from an external medical KB is not used for these. The Symptom Checker relies on `symptom_knowledge_base.json`, which currently covers a limited set of common symptoms.
-*   **LLM Hallucinations/Errors**: While prompt engineering aims to guide the LLM, there's always a possibility of generating incorrect or irrelevant information, especially for queries not covered by the symptom checker's specific logic. Safety layers and disclaimers are crucial.
-*   **Complex Symptom Combinations**: The current Symptom Checker logic and LLM prompting for assessment are designed for common symptom presentations. Highly complex, rare, or subtly combined symptoms might not be interpreted adequately.
-*   **User Memory (optional)**: With Supabase configured (Phase C), the app can save chats and health context across sessions; without it, context is session-only.
-
-## For PPT / Jury: Original Limitations, What We Keep, What We Break & Responsible AI
-
-### Original HealHub limitations (baseline)
-
-*   **Stateless**: No user memory; every session started fresh.
-*   **No personalization**: No profile (age, conditions, location); same advice for everyone.
-*   **Limited symptom coverage**: Symptom checker focused on a small set of common symptoms.
-*   **Not a diagnostic tool**: Guidance only; disclaimers and safety guardrails in place.
-*   **STT/NLU dependent**: Quality depends on Sarvam STT/NLU accuracy.
-
-### What we intentionally keep (ethics & safety)
-
-*   **No diagnosis**: The app never diagnoses; it only provides general guidance, triage points, and “see a doctor” when needed.
-*   **Disclaimers**: Every assessment and health response includes a clear “not a diagnosis” disclaimer.
-*   **Safety guardrails**: Emergency detection, diagnosis-request handling, and medication-advice boundaries are unchanged.
-*   **No replacement for a doctor**: Messaging and prompts reinforce that the app is a companion, not a substitute for qualified care.
-
-### What we “break” (improvements)
-
-*   **Memory**: Session memory (conversation, symptoms, last advice) and optional persistent memory (Supabase: chats, messages, user_memory) so the assistant can say things like “Last time you mentioned stomach pain…”
-*   **Personalization**: Optional user profile (name, age, gender, height, weight, location, conditions, allergies, language) used only for tone and follow-up relevance, never for diagnosis.
-*   **Coverage**: Symptom knowledge base expanded with structured support for digestive issues, fever/infections, women’s health (e.g. menstrual pain), child health (e.g. child fever), nutrition & anemia (weakness), chronic conditions (high blood sugar, high blood pressure), and seasonal (e.g. heat stroke, dengue-related triage).
-
-### Why this is responsible AI
-
-*   **Safety first**: We keep all ethical guardrails; we do not add diagnosis or replace clinical judgment.
-*   **Transparency**: Users see disclaimers; profile and memory are used only for continuity and relevance, not for medical conclusions.
-*   **Inclusive design**: Rural-friendly UI (larger text and buttons), multilingual support, and low-friction access (session-only mode works without login).
-*   **SDG 3 aligned**: Improves health information access and literacy in a bounded, non-diagnostic way.
-
-### Implementation choices (optional note for jury)
-
-*   **Auth**: We use Supabase email/password (not email+OTP or anonymous) for stability and simplicity; the app runs without auth in session-only mode. OTP or anonymous IDs can be added later if needed.
-*   **Directions**: We use OpenStreetMap (Nominatim) for “Find nearby hospitals/clinics” and directions links to avoid paid APIs (e.g. Google Maps); functionality is the same for the user.
+---
 
 ## Future Work
 
-Several enhancements could further improve the application:
+- Expand **symptom knowledge base** and language coverage.
+- Optional **RAG** for curated medical reference with strict safety.
+- Stronger **NLU** for mixed languages (Hinglish, Tanglish, etc.).
+- **UI/UX** and optional mobile-friendly layout.
+- **Persist reminders** (e.g. Supabase or local storage) and optional notification hooks.
+- **Integrations** (e.g. telemedicine links) with user consent and privacy.
 
-*   **Expanded Knowledge Bases**: Continuously update and expand `symptom_knowledge_base.json` with more symptoms, details, and languages/dialects. For general queries, explore re-introducing a refined RAG system if specific, curated knowledge is deemed necessary beyond the LLM's general capabilities.
-*   **User Profiles and Personalization**: Allow users to create profiles to store preferences (language, etc.) and optionally, a secure health history for more personalized advice (with strong privacy safeguards).
-*   **Integration with External Services**: Explore possibilities for integrating with services like appointment booking, medication reminders, or telemedicine platforms, with user consent.
-*   **Enhanced NLU for Mixed Languages**: Improve handling of queries that mix English with Indian languages (Hinglish, Tanglish, etc.).
-*   **Refined Prompt Engineering**: Continuously refine system prompts for both general queries and the symptom checker to improve accuracy, tone, and safety of responses.
-*   **Multi-turn Symptom Checking**: Develop a more dynamic multi-turn conversational ability for the symptom checker beyond the current scripted follow-up questions.
-*   **UI/UX Improvements**: Enhance the Streamlit UI or develop a more robust mobile interface for wider accessibility.
+---
+
+## Credits & License
+
+| Role | Name |
+|------|------|
+| **Author** | **Hari Kishanth R** |
+| **Contributors** | Vishnu Prasaath, Madheswaran, Kristen Sagayaraj |
+
+**License:** See **LICENSE** in the repository.
+
+---
+
+*HealBee is for general health information only. It is not a medical device and does not provide diagnosis or treatment. When in doubt, see a doctor.*

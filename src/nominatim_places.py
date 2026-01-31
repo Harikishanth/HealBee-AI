@@ -1,17 +1,44 @@
 """
-Phase D2: Find nearby hospitals/clinics using OpenStreetMap Nominatim only.
+Phase D2: Find nearby hospitals/clinics using OpenStreetMap Nominatim and Overpass.
 No API keys. All calls in try/except; returns [] on failure.
+- Nominatim: search by location text (city/locality).
+- Overpass: search by GPS (lat/lon) within radius; returns phone, website when available.
 """
 import time
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 import requests
 
 NOMINATIM_BASE = "https://nominatim.openstreetmap.org"
-# Nominatim usage policy requires a valid User-Agent identifying the application
+OVERPASS_BASE = "https://overpass-api.de/api/interpreter"
 HEADERS = {"User-Agent": "HealBee/1.0 (health app; nominatim usage)"}
-# Be polite: 1 request per second
 MIN_REQUEST_INTERVAL = 1.0
+
+# Map symptom/condition (from chat conclusion) to OSM search hints for relevant facilities.
+# Used to prefer or filter nearby results (e.g. dermatology for skin issues).
+CONDITION_TO_SEARCH_HINTS = {
+    "dandruff": ["dermatology", "skin", "clinic", "hospital"],
+    "hair fall": ["dermatology", "clinic", "hospital"],
+    "pimples and acne": ["dermatology", "skin", "clinic", "hospital"],
+    "dry skin": ["dermatology", "clinic", "hospital"],
+    "dark spots and pigmentation": ["dermatology", "clinic", "hospital"],
+    "skin rash": ["dermatology", "clinic", "hospital"],
+    "Alzheimer's disease": ["neurology", "geriatric", "hospital", "clinic"],
+    "chest pain": ["hospital", "cardiac", "clinic"],
+    "shortness of breath": ["hospital", "clinic"],
+    "fever": ["hospital", "clinic"],
+    "cough": ["hospital", "clinic"],
+    "headache": ["hospital", "clinic"],
+    "stomach ache": ["hospital", "clinic"],
+    "diarrhea": ["hospital", "clinic"],
+    "vomiting": ["hospital", "clinic"],
+    "joint pain": ["hospital", "clinic", "orthopaedic"],
+    "fatigue": ["hospital", "clinic"],
+    "dizziness": ["hospital", "clinic"],
+    "eye redness": ["hospital", "clinic", "eye"],
+    "dental pain": ["dentist", "dental", "clinic", "hospital"],
+}
+DEFAULT_SEARCH_HINTS = ["hospital", "clinic"]
 
 
 def _search(q: str, limit: int = 10) -> List[Dict[str, Any]]:
@@ -77,3 +104,121 @@ def make_osm_link(lat: str, lon: str) -> str:
     if not lat or not lon:
         return ""
     return f"https://www.openstreetmap.org/directions?from=&to={lat}%2C{lon}"
+
+
+def _extract_place_from_element(elem: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Parse one Overpass node/way into {name, address, phone, website, lat, lon, type}."""
+    tags = elem.get("tags") or {}
+    name = tags.get("name") or tags.get("brand") or ""
+    if not name and elem.get("type") == "way":
+        name = tags.get("addr:street") or tags.get("addr:full") or "Healthcare facility"
+    addr_parts = [
+        tags.get("addr:full"),
+        tags.get("addr:street"),
+        tags.get("addr:housenumber"),
+        tags.get("addr:city"),
+        tags.get("addr:state"),
+        tags.get("addr:postcode"),
+    ]
+    address = ", ".join(str(p).strip() for p in addr_parts if p and str(p).strip()) or tags.get("addr:street") or ""
+    phone = tags.get("contact:phone") or tags.get("phone") or tags.get("contact:mobile") or ""
+    website = tags.get("contact:website") or tags.get("website") or tags.get("contact:url") or ""
+    if isinstance(phone, list):
+        phone = phone[0] if phone else ""
+    if isinstance(website, list):
+        website = website[0] if website else ""
+    lat, lon = None, None
+    if elem.get("type") == "node":
+        lat, lon = elem.get("lat"), elem.get("lon")
+    elif elem.get("type") == "way" and elem.get("center"):
+        lat = elem["center"].get("lat")
+        lon = elem["center"].get("lon")
+    if lat is None or lon is None:
+        return None
+    place_type = tags.get("amenity") or tags.get("healthcare") or "healthcare"
+    return {
+        "name": name.strip() or "Healthcare facility",
+        "address": address.strip(),
+        "phone": str(phone).strip() if phone else "",
+        "website": str(website).strip() if website else "",
+        "lat": str(lat),
+        "lon": str(lon),
+        "type": place_type,
+    }
+
+
+def search_nearby_by_gps(
+    lat: float,
+    lon: float,
+    radius_m: int = 10000,
+    condition_hints: Optional[List[str]] = None,
+    limit: int = 6,
+) -> List[Dict[str, Any]]:
+    """
+    Search for hospitals/clinics near (lat, lon) using Overpass API (within 10 km by default).
+    Returns list of {name, address, phone, website, lat, lon, type} (5–6 for UI).
+    condition_hints: optional list of keywords (e.g. dermatology, neurology) to rank results.
+    """
+    try:
+        radius = min(max(500, radius_m), 15000)  # default 10 km, max 15 km
+        query = f"""
+        [out:json][timeout:25];
+        (
+          node(around:{radius},{lat},{lon})["amenity"~"hospital|clinic|doctors"];
+          node(around:{radius},{lat},{lon})["healthcare"];
+          way(around:{radius},{lat},{lon})["amenity"~"hospital|clinic|doctors"];
+          way(around:{radius},{lat},{lon})["healthcare"];
+        );
+        out center body;
+        """
+        r = requests.post(
+            OVERPASS_BASE,
+            data={"data": query},
+            headers=HEADERS,
+            timeout=30,
+        )
+        r.raise_for_status()
+        data = r.json()
+        elements = data.get("elements") or []
+        seen = set()
+        out: List[Dict[str, Any]] = []
+        hints = (condition_hints or DEFAULT_SEARCH_HINTS)
+        hints_lower = [h.lower() for h in hints]
+
+        def score(place: Dict[str, Any]) -> int:
+            name_type = (place.get("name") or "") + " " + (place.get("type") or "")
+            n = name_type.lower()
+            for i, h in enumerate(hints_lower):
+                if h in n:
+                    return len(hints_lower) - i
+            return 0
+
+        for elem in elements:
+            place = _extract_place_from_element(elem)
+            if not place or not place.get("name"):
+                continue
+            key = (place.get("lat"), place.get("lon"), (place.get("name") or "")[:60])
+            if key in seen:
+                continue
+            seen.add(key)
+            place["_score"] = score(place)
+            out.append(place)
+
+        out.sort(key=lambda p: (-p.pop("_score", 0), p.get("name") or ""))
+        return out[:limit]
+    except Exception:
+        return []
+
+
+def get_condition_hints_from_symptoms(symptom_names: List[str]) -> List[str]:
+    """Map symptom/condition names (from chat conclusion) to search hints for nearby facilities."""
+    if not symptom_names:
+        return DEFAULT_SEARCH_HINTS
+    hints_set = set()
+    for s in symptom_names:
+        s_clean = (s or "").strip().lower()
+        for cond, hints in CONDITION_TO_SEARCH_HINTS.items():
+            if cond.lower() == s_clean or cond.lower() in s_clean or s_clean in cond.lower():
+                hints_set.update(hints)
+                break
+    return list(hints_set) if hints_set else DEFAULT_SEARCH_HINTS

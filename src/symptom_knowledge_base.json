@@ -103,6 +103,90 @@
       ]
     },
     {
+      "symptom_name": "dandruff",
+      "keywords": ["dandruff", "flakes", "scalp flakes", "white flakes", "scalp itch", "scaly scalp", "rusee", "रूसी", "தலைச்சிரங்கு", "talai sirangu", "thalaichirangu", "talai chirangu", "സിറംഗ്", "రుసి", "rusi", "ಸಿಬೋರಿಯಾ", "খুশকি", "khushki", "রুন্দি", "रुंदी", "rundi", "डॅन्ड्रफ"],
+      "follow_up_questions": [
+        "How long have you had dandruff or scalp flakes?",
+        "Is your scalp itchy, oily, or dry? Have you tried any anti-dandruff shampoo or home remedies?",
+        "Do you have any redness, patches, or hair loss along with the flaking?"
+      ],
+      "basic_triage_points": [
+        "Mild dandruff can often be managed with over-the-counter anti-dandruff shampoos and gentle scalp care.",
+        "If dandruff is severe, doesn't improve with OTC products, or is accompanied by significant redness, scaling, or hair loss, see a doctor or dermatologist.",
+        "Persistent scalp scaling or patches could sometimes indicate other skin conditions (e.g., seborrheic dermatitis, psoriasis) and may need professional evaluation."
+      ]
+    },
+    {
+      "symptom_name": "hair fall",
+      "keywords": ["hair fall", "hair loss", "hairfall", "baldness", "thinning hair", "hair shedding", "bal jhadna", "बाल झड़ना", "hair breakage", "முடி விழுதல்", "mudi vizhudhal", "mudi vizhudhu", "mudi kelayudhu", "മുടി കൊഴിഞ്ഞൽ", "వెంట్రుకలు vypadhu", "ಕೂದಲು ಕಳಚುವಿಕೆ", "koodalu kalachuvike", "চুল পড়া", "chul pora", "চুল ঝরা", "केस गळणे", "kes galne", "केस झडणे", "kes jhadne"],
+      "follow_up_questions": [
+        "How long have you been noticing increased hair fall? Is it mainly on the scalp or all over?",
+        "Have you had any recent stress, illness, diet changes, or new medications?",
+        "Do you have any scalp issues (itching, flakes, redness) or patches where hair is missing?"
+      ],
+      "basic_triage_points": [
+        "Some hair shedding is normal; stress, diet, or hormonal changes can temporarily increase it.",
+        "Sudden, severe hair loss or patchy bald spots should be evaluated by a doctor or dermatologist.",
+        "Hair fall with scalp redness, scaling, or pain may need professional diagnosis to rule out infection or other conditions."
+      ]
+    },
+    {
+      "symptom_name": "pimples and acne",
+      "keywords": ["pimples", "acne", "pimple", "zits", "breakouts", "blackheads", "whiteheads", "spots on face", "munh ke daane", "चेहरे पर दाने", "acne vulgaris", "முகப்பரு", "mukapparu", "mukam pimples", "mukha pimples", "moonu pimples", "പൊള്ള്", "poll", "మొటిమలు", "motimalu", "ಮೊಡಕು", "modaku", "ব্রণ", "brona", "মুখে ব্রণ", "मुखावरील फोड", "मुरुम", "murum"],
+      "follow_up_questions": [
+        "Where are the pimples or acne mainly — face, back, chest, or elsewhere?",
+        "How long have you had them? Do they come and go (e.g., around periods) or are they persistent?",
+        "Have you tried any skincare or treatments? Do you have oily or dry skin?"
+      ],
+      "basic_triage_points": [
+        "Mild acne can often be managed with gentle cleansing, non-comedogenic products, and OTC treatments (e.g., benzoyl peroxide, salicylic acid) as per package directions.",
+        "Moderate or severe acne, or acne that leaves scars or doesn't improve with OTC care, should be evaluated by a doctor or dermatologist.",
+        "Never squeeze or pick pimples; it can cause infection or scarring. When in doubt, consult a dermatologist."
+      ]
+    },
+    {
+      "symptom_name": "dry skin",
+      "keywords": ["dry skin", "dryness", "flaky skin", "chapped skin", "rough skin", "body skin dry", "sukhi twacha", "सूखी त्वचा", "skin peeling", "உலர் தோல்", "ular thol", "oor thol", "skin dry aagudhu", "ഉണങ്ങിയ ത്വക്ക്", "ఎండిన చర్మం", "ಒಣ ಚರ್ಮ", "ona charma", "শুষ্ক ত্বক", "shushko twak", "শুকনো চামড়া", "कोरडी त्वचा", "koradi twacha", "रुक्ष त्वचा", "ruksha twacha"],
+      "follow_up_questions": [
+        "Where is the dryness — face, hands, legs, or all over the body?",
+        "Is it worse in winter or after washing? Do you use moisturizer or any skincare products?",
+        "Do you have any redness, cracks, or itching along with the dryness?"
+      ],
+      "basic_triage_points": [
+        "Mild dry skin often improves with regular moisturizer, gentle soap, and avoiding long hot showers.",
+        "Severe dryness, cracking, bleeding, or widespread irritation should be seen by a doctor or dermatologist.",
+        "Dry skin that doesn't improve with basic care, or is accompanied by rash or infection, may need professional evaluation."
+      ]
+    },
+    {
+      "symptom_name": "dark spots and pigmentation",
+      "keywords": ["dark spots", "pigmentation", "hyperpigmentation", "dark patches", "melasma", "sun spots", "age spots", "skin darkening", "dusra rang", "கரும புள்ளி", "karuma pulli", "karuva spot", "karuma spot", "dark spot varudhu", "ഇരുണ്ട പാടുകൾ", "చీకటి చుక్కలు", "ಕತ್ತಲೆ ಚುಕ್ಕೆಗಳು", "daag", "दाग", "কালো দাগ", "kalo dag", "পিগমেন্টেশন", "দাগ", "गडद ठिपके", "gadad tipke", "पिगमेंटेशन", "ठिपके"],
+      "follow_up_questions": [
+        "Where are the dark spots — face, hands, or other areas? Did they appear after pimples, sun exposure, or pregnancy?",
+        "How long have you had them? Have you tried any creams or treatments?",
+        "Do the spots itch, bleed, or change in size or shape?"
+      ],
+      "basic_triage_points": [
+        "Many dark spots (e.g., post-acne marks, sun-related) are harmless; sunscreen and gentle skincare can help prevent worsening.",
+        "Any spot that changes size, shape, color, or bleeds should be checked by a doctor or dermatologist to rule out serious conditions.",
+        "Persistent or bothersome pigmentation can be evaluated by a dermatologist for safe treatment options."
+      ]
+    },
+    {
+      "symptom_name": "Alzheimer's disease",
+      "keywords": ["alzheimer", "alzheimer's", "alzheimers", "अल्जाइमर", "aljaimar", "அல்சைமர்", "alsaimer", "അൽസ്റ്റിമേഴ്സ്", "అల్జీమర్స్", "ಅಲ್ಜೈಮರ್", "আলঝাইমার", "अल्झाइमर", "memory loss disease", "dementia", "நினைவு இழப்பு", "ninaivu izhappu", "स्मृति हानि", "smriti haani"],
+      "follow_up_questions": [
+        "Is this about you or someone you care for? How long have memory or thinking problems been noticed?",
+        "Are there other changes — like confusion, mood changes, difficulty with daily tasks, or getting lost?",
+        "Has a doctor already evaluated this, or are you looking for general information and when to see a doctor?"
+      ],
+      "basic_triage_points": [
+        "Alzheimer's and other dementias need a proper medical diagnosis. Only a doctor can diagnose after assessment and tests.",
+        "If you or someone you know has ongoing memory loss, confusion, or behavior changes, please see a doctor or a specialist (e.g., neurologist, geriatrician) for evaluation.",
+        "This is general information only, not a diagnosis. Caregiver support and early evaluation are important; seek professional help for diagnosis and care."
+      ]
+    },
+    {
       "symptom_name": "joint pain",
       "keywords": ["arthritis", "joint swelling", "sore joints"],
       "follow_up_questions": [
