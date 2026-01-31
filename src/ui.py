@@ -758,6 +758,19 @@ def main_ui():
             [data-testid="stMultiSelect"] [role="option"] {
                 color: #ffffff !important;
             }
+            /* Profile: soft multiselect pills (neutral, not red) */
+            [data-testid="stExpander"] span[data-baseweb="tag"] {
+                background-color: #94a3b8 !important;
+                color: #ffffff !important;
+                border: none !important;
+                border-radius: 8px !important;
+            }
+            [data-testid="stExpander"] span[data-baseweb="tag"] span {
+                color: #ffffff !important;
+            }
+            /* Profile section: lighter labels, more breathing room */
+            .healbee-profile-section { margin-top: 1rem; margin-bottom: 0.5rem; font-size: 0.9rem; color: var(--healbee-text); opacity: 0.9; font-weight: 500; }
+            .healbee-profile-helper { font-size: 0.8rem; color: var(--healbee-text); opacity: 0.75; margin-top: 0.25rem; margin-bottom: 0.75rem; line-height: 1.4; }
         </style>
     """
     st.markdown(theme_css, unsafe_allow_html=True)
@@ -934,21 +947,37 @@ def main_ui():
             allergies_display = (allergies_display or "") if allergies_display else ""
         known_list = profile.get("chronic_conditions") or profile.get("known_conditions") or profile.get("medical_history") or []
         with st.expander("👤 Your profile (optional)", expanded=False):
-            st.caption("Stored securely and used only to tailor tone and context — never for diagnosis.")
-            name_val = st.text_input("Name (optional)", value=profile.get("name") or "", key="profile_name", placeholder="e.g. Priya")
-            age_val = st.number_input("Age", min_value=1, max_value=120, value=profile.get("age"), step=1, key="profile_age", placeholder="Optional")
-            gender_options = ["Prefer not to say", "Male", "Female", "Other"]
-            db_gender = (profile.get("gender") or "").lower()
-            display_gender = {"male": "Male", "female": "Female", "other": "Other", "prefer_not_to_say": "Prefer not to say"}.get(db_gender, "Prefer not to say")
-            gender_idx = gender_options.index(display_gender) if display_gender in gender_options else 0
-            gender_val = st.selectbox("Gender", options=gender_options, index=gender_idx, key="profile_gender")
-            height_val = st.number_input("Height (cm)", min_value=50, max_value=250, value=profile.get("height_cm"), step=1, key="profile_height", placeholder="Optional")
-            weight_val = st.number_input("Weight (kg)", min_value=1, max_value=300, value=profile.get("weight_kg"), step=1, key="profile_weight", placeholder="Optional")
+            st.markdown("<p class='healbee-profile-helper'>Share what you're comfortable with. This helps HealBee give more relevant suggestions — and is never used for diagnosis.</p>", unsafe_allow_html=True)
+            # --- Basic info ---
+            st.markdown("<p class='healbee-profile-section'>A bit about you</p>", unsafe_allow_html=True)
+            name_val = st.text_input("What should we call you? (optional)", value=profile.get("name") or "", key="profile_name", placeholder="e.g. Priya")
+            col_basic1, col_basic2 = st.columns(2)
+            with col_basic1:
+                age_val = st.number_input("Age (optional)", min_value=1, max_value=120, value=profile.get("age"), step=1, key="profile_age", placeholder="Optional")
+            with col_basic2:
+                gender_options = ["Prefer not to say", "Male", "Female", "Other"]
+                db_gender = (profile.get("gender") or "").lower()
+                display_gender = {"male": "Male", "female": "Female", "other": "Other", "prefer_not_to_say": "Prefer not to say"}.get(db_gender, "Prefer not to say")
+                gender_idx = gender_options.index(display_gender) if display_gender in gender_options else 0
+                gender_val = st.selectbox("Gender (optional)", options=gender_options, index=gender_idx, key="profile_gender")
+            st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
+            # --- Body metrics ---
+            st.markdown("<p class='healbee-profile-section'>Height & weight</p>", unsafe_allow_html=True)
+            st.caption("Optional — helps with general wellness context.")
+            col_ht, col_wt = st.columns(2)
+            with col_ht:
+                height_val = st.number_input("Height (cm)", min_value=50, max_value=250, value=profile.get("height_cm"), step=1, key="profile_height", placeholder="Optional")
+            with col_wt:
+                weight_val = st.number_input("Weight (kg)", min_value=1, max_value=300, value=profile.get("weight_kg"), step=1, key="profile_weight", placeholder="Optional")
+            st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
+            # --- Health context ---
+            st.markdown("<p class='healbee-profile-section'>Health context (optional)</p>", unsafe_allow_html=True)
+            st.caption("This helps HealBee give more relevant suggestions. This is not used for diagnosis.")
             default_conditions = [c for c in known_list if c in PROFILE_CONDITIONS]
-            conditions_val = st.multiselect("Known medical conditions (optional)", options=PROFILE_CONDITIONS, default=default_conditions, key="profile_conditions")
+            conditions_val = st.multiselect("Do you have any ongoing health conditions? (optional)", options=PROFILE_CONDITIONS, default=default_conditions, key="profile_conditions")
             other_default = ", ".join(c for c in known_list if c not in PROFILE_CONDITIONS)
-            other_conditions = st.text_input("Other conditions (comma-separated)", value=other_default, key="profile_other_conditions", placeholder="e.g. anemia, migraine")
-            allergies_val = st.text_input("Allergies (optional)", value=allergies_display, key="profile_allergies", placeholder="e.g. penicillin, nuts")
+            other_conditions = st.text_input("Any other conditions not in the list? (optional)", value=other_default, key="profile_other_conditions", placeholder="e.g. anemia, migraine")
+            allergies_val = st.text_input("Any allergies we should know about? (optional)", value=allergies_display, key="profile_allergies", placeholder="e.g. penicillin, nuts")
             # pregnancy_status: only if female and age >= 12
             show_pregnancy = (gender_val == "Female" and age_val is not None and age_val >= 12)
             pregnancy_val = None
@@ -961,7 +990,8 @@ def main_ui():
                     preg_idx = 1
                 preg_sel = st.radio("Pregnancy status (optional)", options=preg_options, index=preg_idx, key="profile_pregnancy", horizontal=True)
                 pregnancy_val = None if preg_sel == "Not specified" else (preg_sel == "Yes")
-            additional_notes = st.text_area("Additional notes (optional)", value=profile.get("additional_notes") or "", key="profile_notes", placeholder="Any other context for your care", height=60)
+            additional_notes = st.text_area("Anything else you'd like us to keep in mind? (optional)", value=profile.get("additional_notes") or "", key="profile_notes", placeholder="Any other context for your care", height=60)
+            st.markdown("<div style='height: 8px;'></div>", unsafe_allow_html=True)
             preferred_lang = st.session_state.current_language_display
             st.caption(f"Preferred language: **{preferred_lang}** (change above)")
             if st.button("Save profile", key="profile_save"):
