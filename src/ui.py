@@ -747,15 +747,19 @@ def _format_nearby_places_for_chat(places: list, translate_fn, location_name: st
         intro = translate_fn("Here are some clinics and hospitals near you (within 10 km):")
     label_address = translate_fn("Address")
     label_contact = translate_fn("Contact")
+    label_website = translate_fn("Website")
     contact_na = translate_fn("Not available")
     lines = [intro, ""]
     for i, p in enumerate(places[:8], 1):
         name = (p.get("name") or "—").strip()
         address = (p.get("address") or "—").strip()[:200]
         phone = (p.get("phone") or "").strip()
+        website = (p.get("website") or "").strip()[:120]
         lines.append(f"{i}. {name}")
         lines.append(f"   {label_address}: {address}")
         lines.append(f"   {label_contact}: {phone if phone else contact_na}")
+        if website:
+            lines.append(f"   {label_website}: {website}")
         lines.append("")
     lines.append(translate_fn("If you want details about any one place, just tell me the name."))
     return "\n".join(lines).strip()

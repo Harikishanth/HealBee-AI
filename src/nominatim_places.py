@@ -1,11 +1,11 @@
 """
 Phase D2: Find nearby hospitals/clinics using OpenStreetMap Nominatim and Overpass.
 No API keys. All calls in try/except; returns [] on failure.
-- Nominatim: search by location text (city/locality).
-- Overpass: search by GPS (lat/lon) within radius; returns phone, website when available.
+- Nominatim: geocode location text to (lat, lon); also fallback text search.
+- Overpass: query by (lat, lon) for hospitals/clinics with phone, website when available.
 """
 import time
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 
 import requests
 
@@ -57,25 +57,96 @@ def _search(q: str, limit: int = 10) -> List[Dict[str, Any]]:
         return []
 
 
+def _geocode_location(location_text: str) -> Optional[Tuple[float, float]]:
+    """
+    Geocode location text to (lat, lon) using Nominatim.
+    Returns None on failure or if no result.
+    """
+    if not location_text or not location_text.strip():
+        return None
+    try:
+        time.sleep(MIN_REQUEST_INTERVAL)
+        rows = _search(location_text.strip(), limit=1)
+        if not rows:
+            return None
+        r = rows[0]
+        lat, lon = r.get("lat"), r.get("lon")
+        if lat is None or lon is None:
+            return None
+        return (float(lat), float(lon))
+    except Exception:
+        return None
+
+
+def _overpass_health_near(lat: float, lon: float, radius_m: int = 8000, limit: int = 15) -> List[Dict[str, Any]]:
+    """
+    Query Overpass for hospitals/clinics/healthcare near (lat, lon).
+    Returns list of {name, address, phone, website, lat, lon, type} with contact when available.
+    """
+    try:
+        radius = min(max(500, radius_m), 15000)
+        query = f"""
+        [out:json][timeout:25];
+        (
+          node(around:{radius},{lat},{lon})["amenity"~"hospital|clinic|doctors"];
+          node(around:{radius},{lat},{lon})["healthcare"];
+          way(around:{radius},{lat},{lon})["amenity"~"hospital|clinic|doctors"];
+          way(around:{radius},{lat},{lon})["healthcare"];
+        );
+        out center body;
+        """
+        r = requests.post(
+            OVERPASS_BASE,
+            data={"data": query},
+            headers=HEADERS,
+            timeout=30,
+        )
+        r.raise_for_status()
+        data = r.json()
+        elements = data.get("elements") or []
+        seen = set()
+        out: List[Dict[str, Any]] = []
+        for elem in elements:
+            place = _extract_place_from_element(elem)
+            if not place or not place.get("name"):
+                continue
+            key = (place.get("lat"), place.get("lon"), (place.get("name") or "")[:60])
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(place)
+        return out[:limit]
+    except Exception:
+        return []
+
+
 def search_nearby_health_places(location_text: str, limit_per_type: int = 8) -> List[Dict[str, Any]]:
     """
     Search for hospitals, clinics, and primary health centres near the given location.
-    location_text: city name, locality, or area (e.g. "Mumbai", "Connaught Place Delhi").
-    Returns list of {"name", "type", "address", "lat", "lon"}. Empty list on failure.
+    Uses Overpass when possible (after geocoding) to get name, address, phone, website.
+    location_text: city name, locality, or area (e.g. "Mumbai", "Velachery", "Connaught Place Delhi").
+    Returns list of {"name", "type", "address", "phone", "website", "lat", "lon"}. Empty list on failure.
     """
     if not location_text or not location_text.strip():
         return []
     loc = location_text.strip()
+    # 1) Geocode and query Overpass for contact-rich data (phone, website)
+    coords = _geocode_location(loc)
+    if coords is not None:
+        lat, lon = coords
+        time.sleep(MIN_REQUEST_INTERVAL)
+        overpass_results = _overpass_health_near(lat, lon, radius_m=8000, limit=20)
+        if overpass_results:
+            return overpass_results
+    # 2) Fallback: Nominatim text search (no phone/website from OSM for these)
     seen = set()
     out: List[Dict[str, Any]] = []
-
     queries = [
         ("hospital", f"hospital in {loc}"),
         ("clinic", f"clinic in {loc}"),
         ("primary health centre", f"primary health centre in {loc}"),
         ("PHC", f"PHC in {loc}"),
     ]
-
     for place_type, q in queries:
         time.sleep(MIN_REQUEST_INTERVAL)
         rows = _search(q, limit=limit_per_type)
@@ -92,10 +163,11 @@ def search_nearby_health_places(location_text: str, limit_per_type: int = 8) -> 
                 "name": name,
                 "type": place_type,
                 "address": display_name,
+                "phone": "",
+                "website": "",
                 "lat": lat,
                 "lon": lon,
             })
-
     return out[:30]
 
 

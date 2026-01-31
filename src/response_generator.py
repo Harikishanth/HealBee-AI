@@ -209,7 +209,7 @@ class HealBeeResponseGenerator:
         user_content = f"User query: \"{user_query}\"\nDetected language: {nlu_result.language_detected}\nNLU Intent: {nlu_result.intent.value}\nNLU Entities: {[e.text for e in nlu_result.entities]}"
         user_content += f"\n\nCONVERSATION STATE: {first_message_hint}"
         if nlu_result.intent == HealthIntent.SYMPTOM_QUERY:
-            user_content += "\n\n[The user's message may already include duration or multiple symptoms. Do NOT ask for information they have already stated (e.g. do not ask 'How long have you had the fever?' if they said 'fever for 2 days'). Give a brief assessment and at most one new follow-up question if needed.]"
+            user_content += "\n\n[SYMPTOM QUERY — Use entity-first thinking: extract KNOWN entities (symptoms, duration, severity, etc.) from this message and session context; mark UNKNOWN only what is not stated. NEVER ask about KNOWN entities. Give a brief assessment and practical steps; then ask at most ONE follow-up about an UNKNOWN, clinically relevant entity (e.g. pain type, body aches, progression). Do NOT ask 'How long have you had the fever?' if duration is already stated.]"
 
         if session_context:
             parts = []
