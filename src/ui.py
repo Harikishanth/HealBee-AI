@@ -1384,7 +1384,14 @@ def main_ui():
                         st.session_state.voice_input_stage = None
                         return
 
-                    if nlu_output.intent == HealthIntent.SYMPTOM_QUERY and not nlu_output.is_emergency:
+                    # Use symptom checker when NLU says symptom_query, or when the message clearly
+                    # describes symptoms (fever, cough, etc.) and is not a reminder request.
+                    _qt_lower = (user_query_text or "").lower()
+                    _symptom_words = ("fever", "cough", "headache", "pain", "stomach", "cold", "throat", "nausea", "dizzy", "fatigue", "rash", "vomit", "diarrhea", "chest", "breath", "body ache")
+                    _has_symptom = any(w in _qt_lower for w in _symptom_words)
+                    _has_reminder_word = "remind" in _qt_lower or "reminder" in _qt_lower
+                    _treat_as_symptom = (nlu_output.intent == HealthIntent.SYMPTOM_QUERY) or (_has_symptom and not _has_reminder_word)
+                    if _treat_as_symptom and not nlu_output.is_emergency:
                         st.session_state.symptom_checker_active = True
                         st.session_state.symptom_checker_instance = SymptomChecker(nlu_result=nlu_output, api_key=SARVAM_API_KEY)
                         st.session_state.symptom_checker_instance.prepare_follow_up_questions()

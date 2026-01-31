@@ -455,6 +455,19 @@ def detect_and_extract_reminder(message: str) -> Optional[Dict[str, str]]:
     if len(text) < 5:
         return None
     text_lower = text.lower()
+    # Do not treat symptom descriptions as reminder requests: if the message clearly describes
+    # symptoms (fever, cough, headache, etc.) and has no reminder wording, return None so the
+    # symptom checker can handle it.
+    symptom_like = any(
+        w in text_lower
+        for w in (
+            "fever", "cough", "headache", "pain", "stomach", "cold", "throat", "nausea",
+            "dizzy", "fatigue", "rash", "vomit", "diarrhea", "chest", "breath", "body ache",
+        )
+    )
+    reminder_wording = "remind" in text_lower or "reminder" in text_lower
+    if symptom_like and not reminder_wording:
+        return None
     best_match: Optional[tuple] = None  # (trigger, position)
     for trigger in REMINDER_TRIGGER_PHRASES:
         if len(trigger) < 2:
