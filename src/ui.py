@@ -22,9 +22,10 @@ try:
     from src.audio_capture import AudioCleaner
     from src.utils import HealBeeUtilities, get_relevant_journal_entries
     try:
-        from src.utils import detect_and_extract_reminder
+        from src.utils import detect_and_extract_reminder, detect_and_extract_journal
     except ImportError:
         detect_and_extract_reminder = lambda msg: None  # fallback if utils.py is older
+        detect_and_extract_journal = lambda msg: None
     from src.supabase_client import (
         is_supabase_configured,
         auth_sign_in,
@@ -64,9 +65,10 @@ except ImportError:
     from src.audio_capture import AudioCleaner
     from src.utils import HealBeeUtilities, get_relevant_journal_entries
     try:
-        from src.utils import detect_and_extract_reminder
+        from src.utils import detect_and_extract_reminder, detect_and_extract_journal
     except ImportError:
         detect_and_extract_reminder = lambda msg: None  # fallback if utils.py is older
+        detect_and_extract_journal = lambda msg: None
     try:
         from src.supabase_client import (
             is_supabase_configured,
@@ -1336,6 +1338,43 @@ def main_ui():
                     if reminder_just_set and reminder_just_set.get("title"):
                         _title = reminder_just_set["title"]
                         fixed_msg_en = f"I've set a reminder for \"{_title}\". You can view or edit it in the Reminders page."
+                        translated_bot_response = util.translate_text(fixed_msg_en, user_lang) if user_lang != "en-IN" else fixed_msg_en
+                        add_message_to_conversation("assistant", translated_bot_response)
+                        _persist_message_to_db("assistant", translated_bot_response)
+                        st.session_state.last_advice_given = translated_bot_response[:800]
+                        st.session_state.symptom_checker_active = False
+                        _save_health_context_to_memory()
+                        st.session_state.voice_input_stage = None
+                        return
+
+                    # Add to journal from chat (e.g. "Add to my journal: took medicine at 8 PM")
+                    journal_added = None
+                    try:
+                        extracted = detect_and_extract_journal(user_query_text)
+                        if extracted and (extracted.get("title") or extracted.get("content")):
+                            title = (extracted.get("title") or "Note from chat").strip()[:500]
+                            content = (extracted.get("content") or title).strip()[:5000]
+                            entry = {
+                                "source": "chat",
+                                "title": title,
+                                "content": content,
+                                "datetime": datetime.now().isoformat(),
+                            }
+                            if "journal_entries" not in st.session_state:
+                                st.session_state.journal_entries = []
+                            uid = st.session_state.supabase_session.get("user_id") if st.session_state.get("supabase_session") else None
+                            if is_supabase_configured() and uid:
+                                db_journal_entry_insert(uid, entry)
+                                st.session_state.journal_entries = db_journal_entries_list(uid)
+                            else:
+                                entry["id"] = f"j_chat_{len(st.session_state.journal_entries)}_{datetime.now().timestamp()}"
+                                st.session_state.journal_entries.append(entry)
+                            journal_added = {"title": title}
+                    except Exception:
+                        journal_added = None
+                    if journal_added and journal_added.get("title"):
+                        _title = journal_added["title"]
+                        fixed_msg_en = f"I've added \"{_title}\" to your Journal. You can view or edit it on the Journal page."
                         translated_bot_response = util.translate_text(fixed_msg_en, user_lang) if user_lang != "en-IN" else fixed_msg_en
                         add_message_to_conversation("assistant", translated_bot_response)
                         _persist_message_to_db("assistant", translated_bot_response)

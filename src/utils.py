@@ -481,3 +481,93 @@ def detect_and_extract_reminder(message: str) -> Optional[Dict[str, str]]:
         return None
     title = remainder[:200].strip()
     return {"title": title, "note": ""}
+
+
+# --- Journal: detect "add to my journal: X" from chat (multilingual) ---
+JOURNAL_TRIGGER_PHRASES = [
+    # English
+    "add to my journal",
+    "add to journal",
+    "save to my journal",
+    "save to journal",
+    "save this to my journal",
+    "add this to my journal",
+    "write in my journal",
+    "note in my journal",
+    "record in my journal",
+    "put this in my journal",
+    "journal this",
+    "add a journal entry for",
+    "save a note for",
+    "remember this in my journal",
+    "add a health note for",
+    "save a health note for",
+    "add to my journal:",
+    "save to my journal:",
+    "add to journal:",
+    "save to journal:",
+    # Hindi (romanized / Devanagari)
+    "journal mein add karo",
+    "journal mein save karo",
+    "is ko journal mein likho",
+    "जर्नल में जोड़ें",
+    "जर्नल में सहेजें",
+    # Tamil
+    "ஜர்னலில் சேர்",
+    "ஜர்னலில் எழுது",
+    # Malayalam
+    "ജേണലിൽ ചേർക്കുക",
+    "ജേണലിൽ എഴുതുക",
+    # Telugu
+    "జర్నల్‌లో చేర్చండి",
+    "జర్నల్‌లో ఇవ్వండి",
+    # Kannada
+    "ಜರ್ನಲ್‌ಗೆ ಸೇರಿಸಿ",
+    "ಜರ್ನಲ್‌ಗೆ ಬರೆಯಿರಿ",
+    # Marathi
+    "जर्नल मध्ये जोडा",
+    "जर्नल मध्ये लिहा",
+    # Bengali
+    "জার্নালে যোগ করুন",
+    "জার্নালে লিখুন",
+]
+
+
+def detect_and_extract_journal(message: str) -> Optional[Dict[str, str]]:
+    """
+    Detect if the user message is asking to add something to their journal and extract the note.
+    Returns None if no journal intent, else {"title": "...", "content": "..."}.
+    Title is first line or first 80 chars; content is full remainder (user's language, stored as-is).
+    """
+    if not message or not isinstance(message, str):
+        return None
+    text = message.strip()
+    if len(text) < 5:
+        return None
+    text_lower = text.lower()
+    best_match: Optional[tuple] = None  # (trigger, position)
+    for trigger in JOURNAL_TRIGGER_PHRASES:
+        if len(trigger) < 2:
+            continue
+        if trigger.isascii():
+            pos = text_lower.find(trigger.lower())
+        else:
+            pos = text.find(trigger)
+        if pos == -1:
+            continue
+        if best_match is None or len(trigger) > len(best_match[0]):
+            best_match = (trigger, pos)
+    if best_match is None:
+        return None
+    trigger, pos = best_match
+    remainder = text[pos + len(trigger):].strip()
+    for prefix in ("this:", "that:", ":", " - ", " – ", "for ", "to "):
+        if remainder.lower().startswith(prefix):
+            remainder = remainder[len(prefix):].strip()
+            break
+    if len(remainder) < 2:
+        return None
+    content = remainder[:5000].strip()
+    first_line = content.split("\n")[0].strip() if content else ""
+    title = (first_line[:80] if first_line else content[:80] or "Note from chat").strip()
+    return {"title": title, "content": content}
