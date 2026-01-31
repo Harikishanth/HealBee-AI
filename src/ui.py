@@ -7,6 +7,10 @@ import numpy as np # For checking audio data (though not directly used in this v
 from dotenv import load_dotenv
 from typing import Optional
 import re
+try:
+    import markdown as md_lib
+except ImportError:
+    md_lib = None  # optional; app uses st.markdown and strip_markdown() only
 from streamlit_mic_recorder import mic_recorder
 import soundfile as sf
 import io
