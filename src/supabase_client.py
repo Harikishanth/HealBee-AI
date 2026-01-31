@@ -276,3 +276,145 @@ def get_recent_messages_from_other_chats(user_id: str, exclude_chat_id: str, lim
         return out[:limit]
     except Exception:
         return []
+
+
+# --- User reminders (persisted when logged in) ---
+
+def reminders_list(user_id: str) -> List[Dict[str, Any]]:
+    """List reminders for user, newest first. Returns [] on error. Keys: id, title, when_iso, note, done, created_at."""
+    sb = get_supabase_client()
+    if not sb:
+        return []
+    try:
+        r = sb.table("user_reminders").select("id, title, when_iso, note, done, created_at").eq("user_id", user_id).order("created_at", desc=True).execute()
+        return [
+            {
+                "id": str(row["id"]),
+                "title": row.get("title") or "",
+                "when_iso": row.get("when_iso") or "",
+                "note": row.get("note") or "",
+                "done": bool(row.get("done")),
+                "created_at": row.get("created_at"),
+            }
+            for row in (r.data or [])
+        ]
+    except Exception:
+        return []
+
+
+def reminder_insert(user_id: str, title: str, when_iso: str, note: str = "", done: bool = False) -> Optional[str]:
+    """Insert a reminder; returns reminder id or None."""
+    sb = get_supabase_client()
+    if not sb:
+        return None
+    try:
+        r = sb.table("user_reminders").insert({
+            "user_id": user_id,
+            "title": (title or "")[:500],
+            "when_iso": when_iso or "",
+            "note": (note or "")[:1000],
+            "done": done,
+        }).execute()
+        if r.data and len(r.data) > 0:
+            return str(r.data[0]["id"])
+        return None
+    except Exception:
+        return None
+
+
+def reminder_update(user_id: str, reminder_id: str, **kwargs) -> bool:
+    """Update reminder by id. kwargs: title, when_iso, note, done."""
+    sb = get_supabase_client()
+    if not sb:
+        return False
+    try:
+        payload = {}
+        if "title" in kwargs:
+            payload["title"] = (kwargs["title"] or "")[:500]
+        if "when_iso" in kwargs:
+            payload["when_iso"] = kwargs["when_iso"] or ""
+        if "note" in kwargs:
+            payload["note"] = (kwargs["note"] or "")[:1000]
+        if "done" in kwargs:
+            payload["done"] = bool(kwargs["done"])
+        if not payload:
+            return True
+        sb.table("user_reminders").update(payload).eq("id", reminder_id).eq("user_id", user_id).execute()
+        return True
+    except Exception:
+        return False
+
+
+def reminder_delete(user_id: str, reminder_id: str) -> bool:
+    sb = get_supabase_client()
+    if not sb:
+        return False
+    try:
+        sb.table("user_reminders").delete().eq("id", reminder_id).eq("user_id", user_id).execute()
+        return True
+    except Exception:
+        return False
+
+
+# --- User journal entries (persisted when logged in) ---
+
+def journal_entries_list(user_id: str) -> List[Dict[str, Any]]:
+    """List journal entries for user, newest first. Returns [] on error."""
+    sb = get_supabase_client()
+    if not sb:
+        return []
+    try:
+        r = sb.table("user_journal_entries").select("*").eq("user_id", user_id).order("created_at", desc=True).execute()
+        out = []
+        for row in (r.data or []):
+            symptoms = row.get("symptoms")
+            if symptoms is not None and not isinstance(symptoms, list):
+                symptoms = list(symptoms) if hasattr(symptoms, "__iter__") and not isinstance(symptoms, str) else []
+            out.append({
+                "id": str(row["id"]),
+                "source": row.get("source") or "manual",
+                "title": row.get("title") or "",
+                "content": row.get("content") or "",
+                "datetime": row.get("entry_datetime") or row.get("created_at") or "",
+                "symptoms": symptoms or [],
+                "condition_summary": row.get("condition_summary") or "",
+                "user_experience": row.get("user_experience") or "",
+            })
+        return out
+    except Exception:
+        return []
+
+
+def journal_entry_insert(user_id: str, entry: Dict[str, Any]) -> Optional[str]:
+    """Insert a journal entry. entry: source, title, content, datetime (or entry_datetime), optional symptoms, condition_summary, user_experience. Returns id or None."""
+    sb = get_supabase_client()
+    if not sb:
+        return None
+    try:
+        payload = {
+            "user_id": user_id,
+            "source": (entry.get("source") or "manual")[:50],
+            "title": (entry.get("title") or "")[:500],
+            "content": (entry.get("content") or "")[:5000],
+            "entry_datetime": entry.get("datetime") or entry.get("entry_datetime") or "",
+            "symptoms": entry.get("symptoms") if isinstance(entry.get("symptoms"), list) else [],
+            "condition_summary": (entry.get("condition_summary") or "")[:1000],
+            "user_experience": (entry.get("user_experience") or "")[:1000],
+        }
+        r = sb.table("user_journal_entries").insert(payload).execute()
+        if r.data and len(r.data) > 0:
+            return str(r.data[0]["id"])
+        return None
+    except Exception:
+        return None
+
+
+def journal_entry_delete(user_id: str, entry_id: str) -> bool:
+    sb = get_supabase_client()
+    if not sb:
+        return False
+    try:
+        sb.table("user_journal_entries").delete().eq("id", entry_id).eq("user_id", user_id).execute()
+        return True
+    except Exception:
+        return False

@@ -58,7 +58,8 @@
 - **Interactive Symptom Checker** that asks follow-up questions and gives preliminary, triage-style guidance—never a diagnosis.
 - **Optional login** to save chats and a simple health profile for more relevant, continuous conversations.
 - **Maps**: search by city/locality; in Chatbot, **nearby hospitals/clinics by GPS** (within 10 km), tailored to your concern and shown in **your chosen chat language**.
-- **Journal** for quick session notes; **Reminders** for medicine, check-ups, or anything you want to remember (session-only).
+- **Journal** for health notes; when logged in, notes **persist in Supabase**. Symptom-checker conclusions are **auto-saved as journal entries**; the AI **retrieves past entries** when you reference them (e.g. “I had this problem last week”).
+- **Reminders** for medicine, check-ups, or anything you want to remember; **persist in Supabase** when logged in. You can also **set a reminder from chat** (e.g. “remind me to take medicine at 5pm”) and get a clear, translated confirmation.
 - **Switch chat language anytime** without losing the current conversation—continue in the same chat in a new language.
 
 HealBee is **not** a medical device, does **not** diagnose or prescribe, and is **not** a substitute for a doctor. It is a **first point of contact** for general health information and awareness, especially where language or access to information is a barrier.
@@ -129,13 +130,17 @@ HealBee is **not** for: emergency care, diagnosis, prescription, or replacing a 
 - This data is **only** used to tailor **tone and relevance** (e.g. age-appropriate language); it is **never** used for diagnosis or medical conclusions.
 - When **Supabase** is configured, the profile is stored securely and loaded on next login. Without Supabase, it is session-only.
 
-### 6. Journal (Session-Only)
+### 6. Journal (with Chat Integration & Persistence)
 
-- The **Journal** page allows adding **health notes** (title + body). Notes are kept in **session only** by default (no database). Useful for quick scribbles during a session.
+- The **Journal** page lets you add **health notes** (title + body) manually. When **Supabase** is configured and you’re logged in, notes **persist** across sessions and devices.
+- **Chat-derived entries**: When the **Symptom Checker** concludes a flow, a structured journal entry is **automatically created** (condition summary, symptoms, user experience) in your **chat language**, with a “From chat” badge on the Journal page.
+- **Retrieval in chat**: If you refer to past issues (e.g. “I had this problem last week”, “last time you said…”), the app **retrieves relevant journal entries** and passes them to the AI so responses can use that context for continuity. Without login, journal is session-only.
 
-### 7. Reminders (Session-Only)
+### 7. Reminders (with Chat & Persistence)
 
-- The **Reminders** page lets you add **health reminders** (e.g. take medicine, doctor visit) with a **title**, **date & time**, and optional **note**. You can **mark as done** or **delete**. Reminders are **session-only** (not persisted to a database). The UI (including “overdue”) is shown in your **app language**. Ideal for in-session planning.
+- The **Reminders** page lets you add **health reminders** (e.g. take medicine, doctor visit) with a **title**, **date & time**, and optional **note**. You can **mark as done** or **delete**. The UI (including “overdue”) is shown in your **app language**.
+- When **Supabase** is configured and you’re logged in, reminders **persist** across sessions; when not logged in, they are session-only.
+- **Set reminders from chat**: You can say things like “remind me to take medicine at 5pm” or “remind me tomorrow at 10am for my check-up”. The app detects the request, creates the reminder (and saves to Supabase if logged in), and replies with a **fixed, translated confirmation** (e.g. “I’ve set a reminder for…”).
 
 ### 8. Settings & Auth
 
@@ -152,7 +157,7 @@ HealBee is **not** for: emergency care, diagnosis, prescription, or replacing a 
 - **Voice + text** with **Sarvam AI** tuned for Indian languages and accents.
 - **Structured symptom checker** with follow-up questions and triage-style guidance (never diagnosis), backed by an extensible knowledge base.
 - **Optional profile and persistence** (Supabase) for continuous, personalized conversations without locking out users who prefer not to sign in.
-- **Reminders** and **Journal** in-app for quick health-related notes and planning (session-only by design for simplicity).
+- **Reminders** and **Journal** in-app: when logged in, both **persist in Supabase**; you can **set reminders from chat** with a clear confirmation, and the AI **uses journal context** when you reference past issues (e.g. “I had this last week”).
 
 ---
 
@@ -164,8 +169,8 @@ The web app has **five main areas** (tabs/pages):
 |------|-----------------------------|
 | **Chatbot** | Welcome and disclaimers; chat language selector; optional “Your profile” expander; list of past chats (if logged in); current conversation with HealBee; voice and text input; **Nearby hospitals/clinics** expander (by GPS, within 10 km, in your language); feedback option. |
 | **Maps** | Search box for city/locality; “Search” button; list of nearby health places with addresses and “Open map” links. |
-| **Journal** | Title and notes fields to add a health note; list of session notes (session-only). |
-| **Reminders** | Add reminder (title, date & time, note); list of reminders with “Done” and “Delete”; session-only. |
+| **Journal** | Title and notes to add health notes; list of entries (manual + “From chat” from symptom checker). Persists in Supabase when logged in; AI uses past entries when you reference them in chat. |
+| **Reminders** | Add reminder (title, date & time, note); list with “Done” and “Delete”. Persists in Supabase when logged in. Can also set reminders from chat (“remind me to…”). |
 | **Settings** | App language dropdown; short caption; Logout button (if Supabase is configured). |
 
 **Typical user journey (Chatbot):**
@@ -226,7 +231,7 @@ The diagram below shows how HealBee is structured: from the user in the browser,
 |-------|----------------|
 | **User** | Access via **mobile or desktop browser** — cross-platform. |
 | **Frontend** | **Auth screen** (login/sign-up), **UI & layout** (Chatbot, Maps, Journal, Reminders, Settings), **voice/text input**, **chat & app language selectors**. |
-| **Data & Identity** | **Supabase Auth** (sign-in/sign-up), **user profiles** (optional health context), **conversation history** (chats, messages). |
+| **Data & Identity** | **Supabase Auth** (sign-in/sign-up), **user profiles** (optional health context), **conversation history** (chats, messages), **user_reminders**, **user_journal_entries**. |
 | **API / Session Layer** | **Request handling** (receives and routes requests), **session & context** (conversation state, language, extracted symptoms), **personalization** (profile and history for tone and relevance). |
 | **AI & Safety Layer** | **STT** (speech-to-text), **NLU / intent system** (query and entities), **knowledge base** (symptom checker + prompts), **safety & guardrails** (disclaimers, no diagnosis/prescription), **TTS** (text-to-speech). |
 | **Places & Maps** | **Nominatim** (city/locality search), **Overpass** (GPS-based nearby hospitals/clinics within 10 km, condition-aware). |
@@ -243,7 +248,7 @@ The diagram below shows how HealBee is structured: from the user in the browser,
 |-------|------------|---------|
 | **UI** | Streamlit | Single-page web app: Chatbot, Maps, Journal, Reminders, Settings. |
 | **AI / LLM** | Sarvam AI (Sarvam-M, STT, TTS) | NLU, response generation, voice in/out. |
-| **Backend / Auth / DB** | Supabase | Auth (email/password), PostgreSQL, RLS; chats, messages, user memory, user profile. |
+| **Backend / Auth / DB** | Supabase | Auth (email/password), PostgreSQL, RLS; chats, messages, user memory, user profile, user_reminders, user_journal_entries. |
 | **Maps & Nearby** | Nominatim + Overpass (OpenStreetMap) | Geocoding by city; GPS-based nearby hospitals/clinics within 10 km, condition hints. |
 
 ### Main Components (Code)
@@ -255,9 +260,9 @@ The diagram below shows how HealBee is structured: from the user in the browser,
 | `src/response_generator.py` | Builds prompts and calls Sarvam-M for non-symptom queries. |
 | `src/symptom_checker.py` | Manages symptom flow: follow-up questions, state, assessment generation, triage. |
 | `src/prompts.py` | System and safety prompts for the LLM. |
-| `src/supabase_client.py` | Auth (sign-in, sign-up, sign-out), chats, messages, user memory, user profile. |
+| `src/supabase_client.py` | Auth (sign-in, sign-up, sign-out), chats, messages, user memory, user profile, user_reminders, user_journal_entries (CRUD). |
 | `src/nominatim_places.py` | Nominatim: geocoding and “nearby health places” by city. Overpass: GPS-based search within radius (10 km), condition hints, phone/website when available. |
-| `src/utils.py` | Shared helpers (e.g. translation via Sarvam for chat language). |
+| `src/utils.py` | Shared helpers (translation via Sarvam, reminder extraction from chat, journal retrieval by time reference and keywords). |
 | `src/audio_capture.py` | Optional local audio capture; degrades gracefully when PortAudio is missing (e.g. Streamlit Cloud). |
 | `symptom_knowledge_base.json` | Symptoms, keywords, follow-up questions, triage points. |
 | `nlu_config.json`, `hinglish_symptoms.json`, `common_misspellings.json` | NLU and text normalization config. |
@@ -328,9 +333,9 @@ The diagram below shows how HealBee is structured: from the user in the browser,
 ### Optional: Supabase
 
 1. Create a project at [Supabase](https://supabase.com).
-2. Run `supabase_schema.sql` in the SQL Editor (creates tables and RLS).
+2. Run `supabase_schema.sql` in the SQL Editor. It creates tables (`chats`, `messages`, `user_memory`, `user_profile`, `user_reminders`, `user_journal_entries`) and RLS policies. The script is **idempotent** (uses `DROP POLICY IF EXISTS` before each `CREATE POLICY`), so you can re-run it safely if policies already exist.
 3. Add `SUPABASE_URL` and `SUPABASE_ANON_KEY` to `.env` or Cloud Secrets.
-4. Restart the app; Login/Register and persistence will be available.
+4. Restart the app; Login/Register and persistence (chats, profile, reminders, journal) will be available.
 
 ---
 
@@ -354,7 +359,7 @@ The diagram below shows how HealBee is structured: from the user in the browser,
 - **STT/NLU** quality depends on accent, noise, and language mix.
 - **Symptom coverage** is limited by the knowledge base and LLM; complex or rare cases may not be fully captured.
 - **LLM** can occasionally be wrong or irrelevant; prompts and safety layers mitigate this.
-- **Journal** and **Reminders** are session-only unless extended.
+- **Journal** and **Reminders** persist only when Supabase is configured and the user is logged in; otherwise they are session-only.
 - **Voice** in the browser typically needs HTTPS and microphone permission.
 - **Nearby places** depend on OpenStreetMap data; coverage and accuracy vary by region.
 
@@ -369,7 +374,7 @@ HealHub/
 ├── pyproject.toml              # Project metadata
 ├── .env.example                # Env template (no secrets)
 ├── README.md                   # This file
-├── supabase_schema.sql         # Supabase schema and RLS
+├── supabase_schema.sql         # Supabase schema and RLS (idempotent; safe to re-run)
 ├── docs/
 │   └── architecture.png        # Place architecture diagram here
 ├── src/
@@ -415,7 +420,7 @@ On Streamlit Cloud, browser-based voice works; local `sounddevice` is optional a
 - Optional **RAG** for curated medical reference with strict safety.
 - Stronger **NLU** for mixed languages (Hinglish, Tanglish, etc.).
 - **UI/UX** and optional mobile-friendly layout.
-- **Persist reminders** (e.g. Supabase or local storage) and optional notification hooks.
+- Optional **notification hooks** for reminders (e.g. browser or push notifications).
 - **Integrations** (e.g. telemedicine links) with user consent and privacy.
 
 ---
