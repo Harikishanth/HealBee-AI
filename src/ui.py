@@ -20,7 +20,11 @@ try:
     from src.response_generator import HealBeeResponseGenerator
     from src.symptom_checker import SymptomChecker
     from src.audio_capture import AudioCleaner
-    from src.utils import HealBeeUtilities, get_relevant_journal_entries, detect_and_extract_reminder
+    from src.utils import HealBeeUtilities, get_relevant_journal_entries
+    try:
+        from src.utils import detect_and_extract_reminder
+    except ImportError:
+        detect_and_extract_reminder = lambda msg: None  # fallback if utils.py is older
     from src.supabase_client import (
         is_supabase_configured,
         auth_sign_in,
@@ -51,7 +55,11 @@ except ImportError:
     from src.response_generator import HealBeeResponseGenerator
     from src.symptom_checker import SymptomChecker
     from src.audio_capture import AudioCleaner
-    from src.utils import HealBeeUtilities, get_relevant_journal_entries, detect_and_extract_reminder
+    from src.utils import HealBeeUtilities, get_relevant_journal_entries
+    try:
+        from src.utils import detect_and_extract_reminder
+    except ImportError:
+        detect_and_extract_reminder = lambda msg: None  # fallback if utils.py is older
     try:
         from src.supabase_client import (
             is_supabase_configured,
