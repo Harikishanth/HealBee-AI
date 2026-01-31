@@ -22,7 +22,9 @@ git remote set-url origin https://github.com/YOUR_USERNAME/NEW_REPO_NAME.git
 git remote -v
 ```
 
-Example if your username is `Harikishanth` and new repo is `healbee-hackathon`:
+**Current repo:** [Harikishanth/HealBee-AI](https://github.com/Harikishanth/HealBee-AI) — your local `origin` should point here.
+
+Example if you ever create a different repo (e.g. `healbee-hackathon`):
 
 ```bash
 git remote set-url origin https://github.com/Harikishanth/healbee-hackathon.git

@@ -7,7 +7,6 @@ import numpy as np # For checking audio data (though not directly used in this v
 from dotenv import load_dotenv
 from typing import Optional
 import re
-import markdown
 from streamlit_mic_recorder import mic_recorder
 import soundfile as sf
 import io
@@ -593,6 +592,28 @@ def clean_assistant_text(text: str) -> str:
         return right.strip()
 
     return text.strip()
+
+
+def markdown_to_html_safe(text: str) -> str:
+    """
+    Converts basic markdown to HTML for Streamlit-safe rendering. No external dependency.
+    Preserves: **bold**, *italic*, line breaks, bullet lines. Escapes HTML for safety.
+    """
+    if not text:
+        return ""
+    # Escape HTML first
+    s = (
+        text.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+    )
+    # **bold** -> <strong>bold</strong> (non-greedy)
+    s = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", s)
+    # *italic* (single asterisks, after bold replaced) -> <em>italic</em>
+    s = re.sub(r"\*([^*]+?)\*", r"<em>\1</em>", s)
+    # Line breaks
+    s = s.replace("\n", "<br>")
+    return s
 
 
 def strip_markdown(text: str) -> str:
@@ -1226,7 +1247,7 @@ def main_ui():
                     # For user/system: escape HTML only.
                     if role == "assistant":
                         cleaned = clean_assistant_text(content)
-                        content_safe = markdown.markdown(cleaned)
+                        content_safe = markdown_to_html_safe(cleaned)
                     else:
                         content_safe = (
                             content
