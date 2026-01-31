@@ -246,13 +246,12 @@ class SarvamMNLUProcessor:
         is_emergency = self._detect_emergency(transcribed_text, source_language)
         requires_disclaimer = self._requires_medical_disclaimer(transcribed_text)
 
-        # Step 2: Intent classification using Sarvam-M
-        intent, intent_confidence = self._classify_intent(transcribed_text, source_language)
+        # Intent already set above from Hinglish pre-check or _classify_intent; do not overwrite.
 
-        # Step 3: Entity extraction
+        # Step 2: Entity extraction
         entities = self._extract_medical_entities(transcribed_text, source_language)
 
-        # Step 4: Language detection refinement
+        # Step 3: Language detection refinement
         detected_language = self._detect_language(transcribed_text)
 
         result = NLUResult(
