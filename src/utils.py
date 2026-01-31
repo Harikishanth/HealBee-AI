@@ -675,3 +675,45 @@ def detect_nearby_places_request(message: str) -> bool:
             if trigger in text:
                 return True
     return False
+
+
+def extract_nearby_location(message: str) -> Optional[str]:
+    """
+    Extract a location name from a message that is a nearby-places request.
+    E.g. "find nearby clinics in Velachery" -> "Velachery",
+         "find nearby clinics in Velachery–Tambaram area" -> "Velachery–Tambaram",
+         "near Guindy" -> "Guindy".
+    Returns None if no location found (e.g. "near me", "to me") or message is not relevant.
+    """
+    if not message or not isinstance(message, str):
+        return None
+    text = message.strip()
+    if len(text) < 4:
+        return None
+    text_lower = text.lower()
+    for wrong, right in NEARBY_PLACES_TYPO_MAP:
+        text_lower = text_lower.replace(wrong, right)
+    # "near me" / "to me" without a place name -> no location
+    if "near me" in text_lower or text_lower.rstrip().endswith("to me"):
+        return None
+    # Prefer " in X" then " near X" (X != me) then " at X"
+    for sep in (" in ", " near ", " at "):
+        idx = text_lower.find(sep)
+        if idx == -1:
+            continue
+        after = text[idx + len(sep):].strip()
+        if not after:
+            continue
+        if sep == " near " and after.lower().split()[0] == "me":
+            continue
+        # Take up to " area", " locality", " region", " place" or end; limit length
+        for suffix in (" area", " locality", " region", " place"):
+            if after.lower().endswith(suffix):
+                after = after[: -len(suffix)].strip()
+            elif suffix in after.lower():
+                pos = after.lower().find(suffix)
+                after = after[:pos].strip()
+        after = after.strip(".,;:-").strip()
+        if len(after) >= 2 and len(after) <= 120:
+            return after
+    return None
