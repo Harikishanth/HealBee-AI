@@ -632,6 +632,10 @@ NEARBY_PLACES_TRIGGER_PHRASES = [
     # Tamil
     "அருகிலுள்ள மருத்துவமனை",
     "அருகிலுள்ள கிளினிக்",
+    "பக்கத்தில் இருக்கிற மருத்துவமனை",
+    "பக்கத்தில் இருக்கிற கிளினிக்",
+    "எனக்கு அருகிலுள்ள மருத்துவமனைகள்",
+    "எனக்கு அருகிலுள்ள கிளினிக்",
     "பெரும்பாலான மருத்துவமனைகள்",
     # Malayalam
     "അടുത്തുള്ള ആശുപത്രി",
@@ -674,6 +678,9 @@ def detect_nearby_places_request(message: str) -> bool:
         else:
             if trigger in text:
                 return True
+    # Standalone location name (e.g. "வேளச்சேரி", "Velachery") = nearby request with that location
+    if len(text) <= 60 and extract_nearby_location(message) is not None:
+        return True
     return False
 
 
@@ -716,4 +723,18 @@ def extract_nearby_location(message: str) -> Optional[str]:
         after = after.strip(".,;:-").strip()
         if len(after) >= 2 and len(after) <= 120:
             return after
+    # Standalone location name: whole message is the place (e.g. "வேளச்சேரி", "Velachery")
+    if len(text) <= 50 and "near me" not in text_lower and "to me" not in text_lower.rstrip():
+        if " in " not in text_lower and " near " not in text_lower and " at " not in text_lower:
+            words = text.split()
+            if 1 <= len(words) <= 4:
+                # Do not treat symptom words as location
+                symptom_blocklist = (
+                    "fever", "cough", "headache", "pain", "cold", "throat", "nausea", "dizzy",
+                    "fatigue", "rash", "vomit", "diarrhea", "chest", "stomach", "breath", "body",
+                    "காய்ச்சல்", "இருமல்", "தலைவலி", "வயிறு", "மூக்கு",
+                )
+                first_lower = words[0].lower() if words else ""
+                if first_lower not in symptom_blocklist and not first_lower.isdigit():
+                    return text.strip()
     return None

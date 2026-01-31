@@ -761,6 +761,7 @@ def _format_nearby_places_for_chat(places: list, translate_fn, location_name: st
         if website:
             lines.append(f"   {label_website}: {website}")
         lines.append("")
+    lines.append(translate_fn("This is general information. In an emergency, go to the nearest hospital directly."))
     lines.append(translate_fn("If you want details about any one place, just tell me the name."))
     return "\n".join(lines).strip()
 
