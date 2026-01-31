@@ -711,7 +711,7 @@ def main_ui():
             .healbee-disclaimer { font-size: 0.9rem; color: var(--healbee-text); opacity: 0.9; margin-top: 0.5rem; padding: 0.5rem 0; border-top: 1px solid rgba(13,148,136,0.2); }
             .healbee-welcome { font-size: 1.05rem; line-height: 1.55; color: var(--healbee-text); }
             .healbee-msg-label { font-size: 0.8rem; font-weight: 600; margin-bottom: 0.2rem; color: var(--healbee-text); }
-            .healbee-bubble-user { font-size: 1rem; background: #ffffff; border-radius: 14px; padding: 0.65rem 0.9rem; max-width: 78%%; text-align: right; word-wrap: break-word; line-height: 1.5; box-shadow: var(--healbee-shadow); color: var(--healbee-text); border: 1px solid rgba(0,0,0,0.06); }
+            .healbee-bubble-user { font-size: 1rem; background: #ffffff; border-radius: 14px; padding: 0.65rem 0.9rem; max-width: 78%%; text-align: right; word-wrap: break-word; line-height: 1.5; box-shadow: var(--healbee-shadow); color: var(--healbee-text); border: 2px solid #000000; }
             .healbee-bubble-assistant { font-size: 1rem; background: var(--healbee-mint); border-radius: 14px; padding: 0.65rem 0.9rem; max-width: 78%%; text-align: left; word-wrap: break-word; line-height: 1.5; box-shadow: var(--healbee-shadow); color: var(--healbee-text); border: 1px solid rgba(13,148,136,0.2); }
             .healbee-bubble-system { padding: 0.5rem 0.75rem; font-size: 0.95rem; color: var(--healbee-text); }
             .healbee-card { background: var(--healbee-card-bg); border-radius: 14px; padding: 1rem; margin-bottom: 1rem; box-shadow: var(--healbee-shadow); border: 1px solid rgba(0,0,0,0.06); color: var(--healbee-text); }
@@ -725,6 +725,39 @@ def main_ui():
             /* Nav bar only: do not apply black text — keep Chatbot/Maps/Journal/Settings button styling */
             [data-testid="stHorizontalBlock"]:first-of-type,
             [data-testid="stHorizontalBlock"]:first-of-type * { color: revert !important; }
+            /* Personal information fields (e.g. Your profile): white text on dark background */
+            [data-testid="stExpander"] [data-testid="stTextInput"] input,
+            [data-testid="stExpander"] [data-testid="stNumberInput"] input,
+            [data-testid="stExpander"] [data-testid="stTextArea"] textarea,
+            [data-testid="stExpander"] [data-testid="stSelectbox"] input,
+            [data-testid="stExpander"] [data-testid="stSelectbox"] [role="combobox"],
+            [data-testid="stExpander"] [data-testid="stMultiSelect"] input,
+            [data-testid="stExpander"] [data-testid="stMultiSelect"] [role="combobox"] {
+                color: #ffffff !important;
+                background-color: #374151 !important;
+            }
+            [data-testid="stExpander"] [data-testid="stTextInput"] input::placeholder,
+            [data-testid="stExpander"] [data-testid="stNumberInput"] input::placeholder,
+            [data-testid="stExpander"] [data-testid="stTextArea"] textarea::placeholder {
+                color: rgba(255,255,255,0.7) !important;
+            }
+            /* Profile section: labels, captions and button text white */
+            [data-testid="stExpander"] label,
+            [data-testid="stExpander"] [data-testid="stCaptionContainer"],
+            [data-testid="stExpander"] [data-testid="stCaptionContainer"] *,
+            [data-testid="stExpander"] [data-testid="stButton"] button {
+                color: #ffffff !important;
+                background-color: #374151 !important;
+            }
+            /* Dropdown/multiselect option list text white (options in open list) */
+            [data-testid="stSelectbox"] [role="listbox"] [role="option"],
+            [data-testid="stSelectbox"] [role="listbox"] div,
+            [data-testid="stMultiSelect"] [role="listbox"] [role="option"],
+            [data-testid="stMultiSelect"] [role="listbox"] div,
+            [data-testid="stSelectbox"] [role="option"],
+            [data-testid="stMultiSelect"] [role="option"] {
+                color: #ffffff !important;
+            }
         </style>
     """
     st.markdown(theme_css, unsafe_allow_html=True)
