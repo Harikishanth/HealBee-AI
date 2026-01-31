@@ -260,6 +260,11 @@ class HealBeeResponseGenerator:
                     journal_parts.append(line)
                 if journal_parts:
                     parts.append("[Journal entries (from user's Health Journal, e.g. from chat or manual notes) – use to give continuity and guidance when user refers to past problems like 'last week' or 'that time'; do not diagnose from these alone.] " + " | ".join(journal_parts))
+            # Reminder set from chat: user said e.g. "Set a reminder for medicine" – we added it; ask LLM to acknowledge
+            reminder_set = session_context.get("reminder_just_set") or {}
+            if reminder_set and reminder_set.get("title"):
+                title = (reminder_set.get("title") or "").strip()[:150]
+                parts.append("[The user asked to set a reminder. We have already added it to their Reminders page. The reminder title is: \"" + title + "\". You MUST acknowledge briefly in your response that the reminder has been set and that they can view or edit it in the Reminders page. Respond in the same language as the user's query.]")
             if parts:
                 user_content += "\n\n[Session context – use only for continuity and follow-up, e.g. 'Last time you mentioned…'; do not diagnose from this alone.]\n" + "\n".join(parts)
 

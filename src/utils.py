@@ -377,3 +377,98 @@ def get_relevant_journal_entries(user_message: str, journal_entries: List[Dict[s
     # No time range or no matches: return most recent entries
     entries_with_dt.sort(key=lambda x: x[0], reverse=True)
     return [e for _, e in entries_with_dt[:max_entries]]
+
+
+# --- Reminders: detect "set a reminder for X" from chat (multilingual) ---
+# Triggers in 8 languages: English, Hindi, Tamil, Malayalam, Telugu, Kannada, Marathi, Bengali.
+# Reminder text is stored as-is in the user's language (no translation).
+REMINDER_TRIGGER_PHRASES = [
+    # English
+    "set a reminder for",
+    "set reminder for",
+    "remind me to",
+    "remind me for",
+    "add a reminder for",
+    "add reminder for",
+    "create a reminder for",
+    "remember to",
+    "please remind me to",
+    "please set a reminder for",
+    "i need a reminder for",
+    "i need to be reminded to",
+    "reminder for",
+    # Hindi (romanized / Devanagari)
+    "reminder set karo",
+    "reminder add karo",
+    "mujhe yaad dilana",
+    "yaad dilana",
+    "reminder set karo for",
+    "reminder add karo for",
+    "मुझे याद दिलाना",
+    "रिमाइंडर सेट करो",
+    "रिमाइंडर एड करो",
+    # Tamil
+    "நினைவூட்டல் வைக்க",
+    "நினைவூட்டல் சேர்",
+    "எனக்கு நினைவூட்டல்",
+    "reminder set",
+    # Malayalam
+    "ഓർമ്മപ്പെടുത്തൽ വയ്ക്കുക",
+    "ഓർമ്മപ്പെടുത്തൽ ചേർക്കുക",
+    "reminder add",
+    # Telugu
+    "జ్ఞాపకం పెట్టండి",
+    "జ్ఞాపకం జోడించండి",
+    "reminder పెట్టండి",
+    # Kannada
+    "ಜ್ಞಾಪನೆ ಹಾಕಿ",
+    "ಜ್ಞಾಪನೆ ಸೇರಿಸಿ",
+    # Marathi
+    "स्मरणपत्र सेट करा",
+    "स्मरणपत्र जोडा",
+    "मला आठवण करून द्या",
+    # Bengali
+    "অনুস্মারক সেট করুন",
+    "অনুস্মারক যোগ করুন",
+    "আমাকে মনে করিয়ে দিন",
+]
+
+
+def detect_and_extract_reminder(message: str) -> Optional[Dict[str, str]]:
+    """
+    Detect if the user message is asking to set a reminder and extract the reminder text.
+    Works in any of the 8 supported languages; the extracted title is stored as-is (user's language).
+    Returns None if no reminder intent, else {"title": "...", "note": "..."}.
+    """
+    if not message or not isinstance(message, str):
+        return None
+    text = message.strip()
+    if len(text) < 5:
+        return None
+    text_lower = text.lower()
+    best_match: Optional[tuple] = None  # (trigger, position)
+    for trigger in REMINDER_TRIGGER_PHRASES:
+        if len(trigger) < 2:
+            continue
+        if trigger.isascii():
+            pos = text_lower.find(trigger.lower())
+        else:
+            pos = text.find(trigger)
+        if pos == -1:
+            continue
+        # Prefer longer trigger match so "set a reminder for" wins over "reminder for"
+        if best_match is None or len(trigger) > len(best_match[0]):
+            best_match = (trigger, pos)
+    if best_match is None:
+        return None
+    trigger, pos = best_match
+    remainder = text[pos + len(trigger):].strip()
+    # Remove leading "to " / "for " / ":" if present for cleaner title
+    for prefix in ("to ", "for ", ": ", " - ", " – "):
+        if remainder.lower().startswith(prefix):
+            remainder = remainder[len(prefix):].strip()
+            break
+    if len(remainder) < 2:
+        return None
+    title = remainder[:200].strip()
+    return {"title": title, "note": ""}

@@ -10,7 +10,7 @@ import re
 from streamlit_mic_recorder import mic_recorder
 import soundfile as sf
 import io
-from datetime import datetime
+from datetime import datetime, timedelta
 # Firebase removed: HealBee uses Supabase only for auth and persistence.
 # Feedback buttons still render; feedback is acknowledged but not persisted.
 
@@ -20,7 +20,7 @@ try:
     from src.response_generator import HealBeeResponseGenerator
     from src.symptom_checker import SymptomChecker
     from src.audio_capture import AudioCleaner
-    from src.utils import HealBeeUtilities, get_relevant_journal_entries
+    from src.utils import HealBeeUtilities, get_relevant_journal_entries, detect_and_extract_reminder
     from src.supabase_client import (
         is_supabase_configured,
         auth_sign_in,
@@ -51,7 +51,7 @@ except ImportError:
     from src.response_generator import HealBeeResponseGenerator
     from src.symptom_checker import SymptomChecker
     from src.audio_capture import AudioCleaner
-    from src.utils import HealBeeUtilities, get_relevant_journal_entries
+    from src.utils import HealBeeUtilities, get_relevant_journal_entries, detect_and_extract_reminder
     try:
         from src.supabase_client import (
             is_supabase_configured,
@@ -786,12 +786,12 @@ def _save_health_context_to_memory() -> None:
 
 
 def _save_chat_to_journal(assessment: dict) -> None:
-    """Save symptom/condition details from this chat to the Journal (per-chat) for retrieval when user says 'last week' etc."""
+    """Save symptom/condition details from this chat to the Journal in the user's chat language (any of 8 languages)."""
     try:
         symptoms = list(st.session_state.get("extracted_symptoms") or [])[:15]
         follow_answers = list(st.session_state.get("follow_up_answers") or [])
-        condition_summary = (assessment.get("assessment_summary") or "").strip()[:500]
-        # User experience: short summary of follow-up Q&A
+        condition_summary_raw = (assessment.get("assessment_summary") or "").strip()[:500]
+        # User experience: short summary of follow-up Q&A (already in user's language)
         exp_parts = []
         for fa in follow_answers[-10:]:
             sym = (fa.get("symptom_name") or "").strip()
@@ -799,10 +799,26 @@ def _save_chat_to_journal(assessment: dict) -> None:
             if sym or ans:
                 exp_parts.append(f"{sym}: {ans}" if sym else ans)
         user_experience = "; ".join(exp_parts)[:400] if exp_parts else ""
-        title = "Symptom check: " + ", ".join(symptoms)[:80] if symptoms else "Symptom check"
+        title_raw = "Symptom check: " + ", ".join(symptoms)[:80] if symptoms else "Symptom check"
+        # Store in user's chat language (any of 8)
+        user_lang = st.session_state.get("current_language_code") or "en-IN"
+        util = _get_utils(SARVAM_API_KEY)
+        if user_lang != "en-IN" and util:
+            try:
+                title = util.translate_text(title_raw, user_lang) or title_raw
+                condition_summary = util.translate_text(condition_summary_raw, user_lang) or condition_summary_raw
+                label_experience = util.translate_text("User experience:", user_lang) or "User experience:"
+            except Exception:
+                title = title_raw
+                condition_summary = condition_summary_raw
+                label_experience = "User experience:"
+        else:
+            title = title_raw
+            condition_summary = condition_summary_raw
+            label_experience = "User experience:"
         content_parts = [condition_summary] if condition_summary else []
         if user_experience:
-            content_parts.append("User experience: " + user_experience)
+            content_parts.append(label_experience + " " + user_experience)
         content = "\n\n".join(content_parts)
         entry = {
             "source": "chat",
@@ -1261,6 +1277,32 @@ def main_ui():
                         else:
                             generate_and_display_assessment()
                     else:
+                        # Auto-create reminder from chat when user says e.g. "Set a reminder for medicine" (any of 8 languages)
+                        reminder_just_set = None
+                        try:
+                            extracted = detect_and_extract_reminder(user_query_text)
+                            if extracted and extracted.get("title"):
+                                title = extracted["title"].strip()[:200]
+                                note = (extracted.get("note") or "").strip()[:300]
+                                now = datetime.now()
+                                # Default: today at 8:00 PM so user can edit time in Reminders page
+                                when_dt = now.replace(hour=20, minute=0, second=0, microsecond=0)
+                                if when_dt <= now:
+                                    when_dt = when_dt + timedelta(days=1)
+                                when_iso = when_dt.isoformat()
+                                reminders_list = st.session_state.get("reminders") or []
+                                new_id = f"rem_chat_{len(reminders_list)}_{now.timestamp()}"
+                                reminders_list.append({
+                                    "id": new_id,
+                                    "title": title,
+                                    "when_iso": when_iso,
+                                    "note": note,
+                                    "done": False,
+                                })
+                                st.session_state.reminders = reminders_list
+                                reminder_just_set = {"title": title}
+                        except Exception:
+                            pass
                         journal_entries = st.session_state.get("journal_entries") or []
                         relevant_journal = get_relevant_journal_entries(user_query_text, journal_entries, max_entries=5)
                         session_context = {
@@ -1271,6 +1313,7 @@ def main_ui():
                             "user_memory": dict(st.session_state.persistent_memory) if st.session_state.get("persistent_memory") else None,
                             "past_messages": [],
                             "relevant_journal_entries": relevant_journal,
+                            "reminder_just_set": reminder_just_set,
                         }
                         if is_supabase_configured() and st.session_state.get("supabase_session") and st.session_state.get("current_chat_id"):
                             try:
