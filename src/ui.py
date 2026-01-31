@@ -20,7 +20,7 @@ try:
     from src.response_generator import HealBeeResponseGenerator
     from src.symptom_checker import SymptomChecker
     from src.audio_capture import AudioCleaner
-    from src.utils import HealBeeUtilities
+    from src.utils import HealBeeUtilities, get_relevant_journal_entries
     from src.supabase_client import (
         is_supabase_configured,
         auth_sign_in,
@@ -51,7 +51,7 @@ except ImportError:
     from src.response_generator import HealBeeResponseGenerator
     from src.symptom_checker import SymptomChecker
     from src.audio_capture import AudioCleaner
-    from src.utils import HealBeeUtilities
+    from src.utils import HealBeeUtilities, get_relevant_journal_entries
     try:
         from src.supabase_client import (
             is_supabase_configured,
@@ -241,6 +241,7 @@ UI_TEXT = {
         "delete": "Delete",
         "mark_done": "Done",
         "overdue": "overdue",
+        "journal_from_chat": "From chat",
     },
     "ta": {
         "home": "முகப்பு",
@@ -284,6 +285,7 @@ UI_TEXT = {
         "delete": "அழி",
         "mark_done": "முடிந்தது",
         "overdue": "காலம் கடந்தது",
+        "journal_from_chat": "சாட்போடிலிருந்து",
     },
     "ml": {
         "home": "ഹോം",
@@ -327,6 +329,7 @@ UI_TEXT = {
         "delete": "ഇല്ലാതാക്കുക",
         "mark_done": "പൂർത്തി",
         "overdue": "കാലഹരണപ്പെട്ടത്",
+        "journal_from_chat": "ചാറ്റിൽ നിന്ന്",
     },
     "te": {
         "home": "హోమ్",
@@ -370,6 +373,7 @@ UI_TEXT = {
         "delete": "తొలగించు",
         "mark_done": "పూర్తయింది",
         "overdue": "గడువు మించిన",
+        "journal_from_chat": "చాట్ నుండి",
     },
     "hi": {
         "home": "होम",
@@ -413,6 +417,7 @@ UI_TEXT = {
         "delete": "हटाएं",
         "mark_done": "हो गया",
         "overdue": "समय पार",
+        "journal_from_chat": "चैट से",
         "your_chats": "आपकी चैट",
         "chat_language_label": "चैट भाषा",
         "note_title": "शीर्षक",
@@ -460,6 +465,7 @@ UI_TEXT = {
         "delete": "ಅಳಿಸಿ",
         "mark_done": "ಪೂರ್ಣ",
         "overdue": "ಕಾಲ ಮೀರಿದ",
+        "journal_from_chat": "ಚಾಟ್‌ನಿಂದ",
         "your_chats": "ನಿಮ್ಮ ಚಾಟ್‌ಗಳು",
         "chat_language_label": "ಚಾಟ್ ಭಾಷೆ",
         "note_title": "ಶೀರ್ಷಿಕೆ",
@@ -507,6 +513,7 @@ UI_TEXT = {
         "delete": "हटवा",
         "mark_done": "झाले",
         "overdue": "कालबाह्य",
+        "journal_from_chat": "चॅटमधून",
         "your_chats": "तुमचे चॅट",
         "chat_language_label": "चॅट भाषा",
         "note_title": "शीर्षक",
@@ -554,6 +561,7 @@ UI_TEXT = {
         "delete": "মুছুন",
         "mark_done": "সম্পন্ন",
         "overdue": "সময় উত্তীর্ণ",
+        "journal_from_chat": "চ্যাট থেকে",
         "your_chats": "আপনার চ্যাট",
         "chat_language_label": "চ্যাট ভাষা",
         "note_title": "শিরোনাম",
@@ -773,6 +781,41 @@ def _save_health_context_to_memory() -> None:
         if advice:
             user_memory_upsert(uid, "last_advice", advice)
             st.session_state.persistent_memory["last_advice"] = advice
+    except Exception:
+        pass
+
+
+def _save_chat_to_journal(assessment: dict) -> None:
+    """Save symptom/condition details from this chat to the Journal (per-chat) for retrieval when user says 'last week' etc."""
+    try:
+        symptoms = list(st.session_state.get("extracted_symptoms") or [])[:15]
+        follow_answers = list(st.session_state.get("follow_up_answers") or [])
+        condition_summary = (assessment.get("assessment_summary") or "").strip()[:500]
+        # User experience: short summary of follow-up Q&A
+        exp_parts = []
+        for fa in follow_answers[-10:]:
+            sym = (fa.get("symptom_name") or "").strip()
+            ans = (fa.get("answer") or "").strip()[:80]
+            if sym or ans:
+                exp_parts.append(f"{sym}: {ans}" if sym else ans)
+        user_experience = "; ".join(exp_parts)[:400] if exp_parts else ""
+        title = "Symptom check: " + ", ".join(symptoms)[:80] if symptoms else "Symptom check"
+        content_parts = [condition_summary] if condition_summary else []
+        if user_experience:
+            content_parts.append("User experience: " + user_experience)
+        content = "\n\n".join(content_parts)
+        entry = {
+            "source": "chat",
+            "title": title,
+            "content": content,
+            "datetime": datetime.now().isoformat(),
+            "symptoms": symptoms,
+            "condition_summary": condition_summary,
+            "user_experience": user_experience,
+        }
+        if "journal_entries" not in st.session_state:
+            st.session_state.journal_entries = []
+        st.session_state.journal_entries.append(entry)
     except Exception:
         pass
 
@@ -1218,6 +1261,8 @@ def main_ui():
                         else:
                             generate_and_display_assessment()
                     else:
+                        journal_entries = st.session_state.get("journal_entries") or []
+                        relevant_journal = get_relevant_journal_entries(user_query_text, journal_entries, max_entries=5)
                         session_context = {
                             "extracted_symptoms": list(st.session_state.extracted_symptoms),
                             "follow_up_answers": list(st.session_state.follow_up_answers),
@@ -1225,6 +1270,7 @@ def main_ui():
                             "user_profile": dict(st.session_state.user_profile) if st.session_state.get("user_profile") else None,
                             "user_memory": dict(st.session_state.persistent_memory) if st.session_state.get("persistent_memory") else None,
                             "past_messages": [],
+                            "relevant_journal_entries": relevant_journal,
                         }
                         if is_supabase_configured() and st.session_state.get("supabase_session") and st.session_state.get("current_chat_id"):
                             try:
@@ -1357,6 +1403,8 @@ def main_ui():
                         # Phase C: save health context to user_memory
                         _save_health_context_to_memory()
                         st.session_state.last_advice_given = (summary or assessment_str[:800])[:800]
+                        # Save symptom/condition summary to Journal (per-chat, for retrieval when user says "last week" etc.)
+                        _save_chat_to_journal(assessment)
                     except Exception as e:
                         st.error(f"Error formatting assessment: {e}")
                         try:
@@ -1692,6 +1740,7 @@ def main_ui():
                 if st.button(_t("save"), key="journal_save_btn"):
                     if (note_text or "").strip() or (note_title or "").strip():
                         entry = {
+                            "source": "manual",
                             "title": (note_title or "").strip() or "Untitled",
                             "content": (note_text or "").strip(),
                             "datetime": datetime.now().isoformat(),
@@ -1716,18 +1765,23 @@ def main_ui():
         if not entries:
             st.markdown("""<div class="healbee-card"><p style="color: var(--healbee-text); opacity: 0.9;">""" + _t("empty_notes") + """</p></div>""", unsafe_allow_html=True)
         else:
+            _from_chat_label = _t("journal_from_chat")
             for i, e in enumerate(reversed(entries)):
                 dt_str = e.get("datetime", "")
                 try:
-                    dt = datetime.fromisoformat(dt_str)
+                    dt = datetime.fromisoformat(dt_str.replace("Z", "+00:00"))
+                    if getattr(dt, "tzinfo", None):
+                        dt = dt.replace(tzinfo=None)
                     dt_display = dt.strftime("%d %b %Y, %I:%M %p")
                 except Exception:
                     dt_display = dt_str or "—"
                 title = (e.get("title") or "Untitled").replace("<", "&lt;").replace(">", "&gt;")
                 content = (e.get("content") or "").replace("<", "&lt;").replace(">", "&gt;").replace("\n", "<br>")
+                from_chat = e.get("source") == "chat"
+                badge = f'<span style="font-size: 0.75rem; background: var(--healbee-accent); color: white; padding: 2px 6px; border-radius: 4px; margin-left: 6px;">{_from_chat_label}</span>' if from_chat else ""
                 st.markdown(f"""
                     <div class="healbee-card">
-                        <div style="font-weight: 600; color: var(--healbee-text); margin-bottom: 0.25rem;">{title}</div>
+                        <div style="font-weight: 600; color: var(--healbee-text); margin-bottom: 0.25rem;">{title}{badge}</div>
                         <div style="font-size: 0.85rem; color: var(--healbee-accent); margin-bottom: 0.5rem;">{dt_display}</div>
                         <div style="color: var(--healbee-text); line-height: 1.5;">{content}</div>
                     </div>

@@ -1,6 +1,7 @@
 import json
 import re
-from typing import Dict, List, Optional
+from datetime import datetime, timedelta
+from typing import Dict, List, Optional, Any
 from dataclasses import dataclass
 import requests
 import numpy as np
@@ -302,3 +303,77 @@ def create_safety_layer() -> HealthSafetyResult:
         message="",
         detected_issues=[]
     )
+
+
+# --- Journal: time-reference parsing and relevant-entry retrieval ---
+
+def _parse_time_reference_from_message(message: str) -> Optional[tuple]:
+    """
+    Parse user message for time references like "last week", "yesterday", "a few days ago".
+    Returns (start_dt, end_dt) as datetime objects (both inclusive) or None if no clear reference.
+    """
+    if not message or not isinstance(message, str):
+        return None
+    text = message.lower().strip()
+    now = datetime.now()
+    # "yesterday" -> 1–2 days ago
+    if re.search(r"\byesterday\b", text):
+        end = now - timedelta(days=1)
+        start = now - timedelta(days=2)
+        return (start, end)
+    # "last week" / "past week" -> 7–14 days ago (previous calendar week) or last 7 days
+    if re.search(r"\blast\s+week\b|\bpast\s+week\b|\bprevious\s+week\b", text):
+        end = now - timedelta(days=7)
+        start = now - timedelta(days=14)
+        return (start, end)
+    # "a few days ago" / "few days back"
+    if re.search(r"\bfew\s+days\s+ago\b|\bfew\s+days\s+back\b|\ba\s+couple\s+of\s+days\b", text):
+        end = now - timedelta(days=2)
+        start = now - timedelta(days=10)
+        return (start, end)
+    # "last month"
+    if re.search(r"\blast\s+month\b|\bpast\s+month\b|\bprevious\s+month\b", text):
+        end = now - timedelta(days=30)
+        start = now - timedelta(days=60)
+        return (start, end)
+    # "last time" / "that time" / "before" / "previously" / "earlier" -> no specific range; caller can use recent entries
+    if re.search(r"\blast\s+time\b|\bthat\s+time\b|\bbefore\b|\bpreviously\b|\bearlier\b|\bthat\s+problem\b|\bsame\s+(issue|problem)\b|\bi\s+had\s+this\b", text):
+        # Return "recent" window: last 30 days
+        end = now
+        start = now - timedelta(days=30)
+        return (start, end)
+    return None
+
+
+def get_relevant_journal_entries(user_message: str, journal_entries: List[Dict[str, Any]], max_entries: int = 5) -> List[Dict[str, Any]]:
+    """
+    Return journal entries relevant to the user message (e.g. "I had this problem last week").
+    - If message contains a time reference (last week, yesterday, etc.), filter entries by that date range.
+    - If no time reference but message suggests past context (previously, that problem), return recent entries.
+    - Otherwise return up to max_entries most recent entries for continuity.
+    """
+    if not journal_entries:
+        return []
+    # Parse datetime for each entry
+    now = datetime.now()
+    entries_with_dt: List[tuple] = []
+    for e in journal_entries:
+        dt_str = e.get("datetime") or ""
+        try:
+            dt = datetime.fromisoformat(dt_str.replace("Z", "+00:00"))
+            if dt.tzinfo:
+                dt = dt.replace(tzinfo=None)  # naive compare with now
+            entries_with_dt.append((dt, e))
+        except Exception:
+            entries_with_dt.append((now, e))
+    time_range = _parse_time_reference_from_message(user_message)
+    if time_range:
+        start_dt, end_dt = time_range
+        # Include entries whose datetime is in [start_dt, end_dt]
+        in_range = [(dt, e) for dt, e in entries_with_dt if start_dt <= dt <= end_dt]
+        if in_range:
+            in_range.sort(key=lambda x: x[0], reverse=True)
+            return [e for _, e in in_range[:max_entries]]
+    # No time range or no matches: return most recent entries
+    entries_with_dt.sort(key=lambda x: x[0], reverse=True)
+    return [e for _, e in entries_with_dt[:max_entries]]

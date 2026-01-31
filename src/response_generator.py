@@ -240,6 +240,26 @@ class HealBeeResponseGenerator:
             if pm:
                 pm_str = " | ".join(f"{m.get('role', 'user')}: {(m.get('content') or '')[:150]}" for m in pm[:8])
                 parts.append("[Past messages from other chats – for continuity only; do not diagnose from these.] " + pm_str)
+            # Journal: entries relevant to user message (e.g. "I had this problem last week") – use to guide/respond with continuity
+            journal_entries = session_context.get("relevant_journal_entries") or []
+            if journal_entries:
+                journal_parts = []
+                for je in journal_entries[:5]:
+                    dt_str = (je.get("datetime") or "")[:19]
+                    title = (je.get("title") or "").strip()[:100]
+                    cond = (je.get("condition_summary") or je.get("content") or "").strip()[:300]
+                    exp = (je.get("user_experience") or "").strip()[:200]
+                    syms = je.get("symptoms")
+                    line = f"Date: {dt_str}; Title: {title}"
+                    if cond:
+                        line += f"; Summary: {cond}"
+                    if exp:
+                        line += f"; User experience: {exp}"
+                    if syms:
+                        line += f"; Symptoms: {', '.join(str(s) for s in syms[:10])}"
+                    journal_parts.append(line)
+                if journal_parts:
+                    parts.append("[Journal entries (from user's Health Journal, e.g. from chat or manual notes) – use to give continuity and guidance when user refers to past problems like 'last week' or 'that time'; do not diagnose from these alone.] " + " | ".join(journal_parts))
             if parts:
                 user_content += "\n\n[Session context – use only for continuity and follow-up, e.g. 'Last time you mentioned…'; do not diagnose from this alone.]\n" + "\n".join(parts)
 
