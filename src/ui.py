@@ -732,6 +732,30 @@ def clean_assistant_text(text: str) -> str:
     return text.strip()
 
 
+def _format_nearby_places_for_chat(places: list, translate_fn) -> str:
+    """
+    Format nearby hospitals/clinics as plain text for chat. No markdown-heavy output.
+    translate_fn(s: str) -> str for translating labels (Address, Contact, Not available, etc.).
+    """
+    if not places:
+        return translate_fn("I couldn't find any clinics near your location. Try a nearby city or locality.")
+    intro = translate_fn("Here are some clinics and hospitals near you (within 10 km):")
+    label_address = translate_fn("Address")
+    label_contact = translate_fn("Contact")
+    contact_na = translate_fn("Not available")
+    lines = [intro, ""]
+    for i, p in enumerate(places[:8], 1):
+        name = (p.get("name") or "—").strip()
+        address = (p.get("address") or "—").strip()[:200]
+        phone = (p.get("phone") or "").strip()
+        lines.append(f"{i}. {name}")
+        lines.append(f"   {label_address}: {address}")
+        lines.append(f"   {label_contact}: {phone if phone else contact_na}")
+        lines.append("")
+    lines.append(translate_fn("If you want directions to any of these, tell me the name."))
+    return "\n".join(lines).strip()
+
+
 def markdown_to_html_safe(text: str) -> str:
     """
     Converts basic markdown to HTML for Streamlit-safe rendering. No external dependency.
@@ -1291,19 +1315,7 @@ def main_ui():
                                 return _util_np.translate_text(s, _user_lang_np) or s
                             except Exception:
                                 return s
-                        _lines = [_np_t("Here are hospitals/clinics within 10 km of your location:")]
-                        for _p in (st.session_state.nearby_chat_results or []):
-                            _name = (_p.get("name") or "—").replace("<", "&lt;").replace(">", "&gt;")
-                            _addr = (_p.get("address") or "—")[:150].replace("<", "&lt;").replace(">", "&gt;")
-                            _phone = (_p.get("phone") or "").strip()
-                            _web = (_p.get("website") or "").strip()
-                            _line = f"• **{_name}** — {_addr}"
-                            if _phone:
-                                _line += f" — {_np_t('Phone')}: {_phone}"
-                            if _web:
-                                _line += f" — {_np_t('Website')}: {_web[:50]}"
-                            _lines.append(_line)
-                        _msg = "\n\n".join(_lines)
+                        _msg = _format_nearby_places_for_chat(st.session_state.nearby_chat_results or [], _np_t)
                         add_message_to_conversation("assistant", _msg)
                         _persist_message_to_db("assistant", _msg)
                         st.session_state.pending_nearby_request = False
@@ -1439,29 +1451,17 @@ def main_ui():
                             _hints = get_condition_hints_from_symptoms(st.session_state.get("extracted_symptoms") or [])
                             _places = search_nearby_by_gps(_lat, _lon, radius_m=10000, condition_hints=_hints, limit=6)
                             st.session_state.nearby_chat_results = _places
-                            journal_entries = st.session_state.get("journal_entries") or []
-                            relevant_journal = get_relevant_journal_entries(user_query_text, journal_entries, max_entries=5)
-                            session_context = {
-                                "extracted_symptoms": list(st.session_state.extracted_symptoms),
-                                "follow_up_answers": list(st.session_state.follow_up_answers),
-                                "last_advice_given": (st.session_state.last_advice_given or "")[:800],
-                                "user_profile": dict(st.session_state.user_profile) if st.session_state.get("user_profile") else None,
-                                "user_memory": dict(st.session_state.persistent_memory) if st.session_state.get("persistent_memory") else None,
-                                "past_messages": [],
-                                "relevant_journal_entries": relevant_journal,
-                                "nearby_places": _places,
-                            }
-                            if is_supabase_configured() and st.session_state.get("supabase_session") and st.session_state.get("current_chat_id"):
+                            def _nearby_t(s: str) -> str:
+                                if user_lang == "en-IN":
+                                    return s
                                 try:
-                                    uid = st.session_state.supabase_session.get("user_id")
-                                    session_context["past_messages"] = get_recent_messages_from_other_chats(uid, st.session_state.current_chat_id, limit=8)
+                                    return util.translate_text(s, user_lang) or s
                                 except Exception:
-                                    pass
-                            bot_response = response_gen.generate_response(user_query_text, nlu_output, session_context=session_context)
-                            translated_bot_response = util.translate_text(bot_response, user_lang)
-                            add_message_to_conversation("assistant", translated_bot_response)
-                            _persist_message_to_db("assistant", translated_bot_response)
-                            st.session_state.last_advice_given = translated_bot_response[:800]
+                                    return s
+                            nearby_response = _format_nearby_places_for_chat(_places, _nearby_t)
+                            add_message_to_conversation("assistant", nearby_response)
+                            _persist_message_to_db("assistant", nearby_response)
+                            st.session_state.last_advice_given = nearby_response[:800]
                             st.session_state.symptom_checker_active = False
                             _save_health_context_to_memory()
                             st.session_state.voice_input_stage = None
