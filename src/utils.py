@@ -587,10 +587,24 @@ def detect_and_extract_journal(message: str) -> Optional[Dict[str, str]]:
 
 
 # --- Nearby hospitals/clinics: detect "find nearby hospitals" from chat (multilingual) ---
+# Common typos for nearby/hospital/clinic (normalized before matching)
+NEARBY_PLACES_TYPO_MAP = [
+    ("neraby", "nearby"),
+    ("near by", "nearby"),
+    ("hosptial", "hospital"),
+    ("hosptials", "hospitals"),
+    ("hospial", "hospital"),
+    ("clininc", "clinic"),
+]
+
 NEARBY_PLACES_TRIGGER_PHRASES = [
     # English
+    "find the nearby hospitals",
+    "find the nearby clinics",
     "find nearby hospitals",
     "find nearby clinics",
+    "nearby hospitals to me",
+    "nearby clinics to me",
     "nearby hospitals",
     "nearby clinics",
     "hospitals near me",
@@ -641,6 +655,7 @@ def detect_nearby_places_request(message: str) -> bool:
     """
     Detect if the user is explicitly asking to find nearby hospitals or clinics.
     Returns True if the message clearly requests nearby hospitals/clinics (in any supported language).
+    Normalizes common typos (e.g. neraby -> nearby) before matching.
     """
     if not message or not isinstance(message, str):
         return False
@@ -648,6 +663,8 @@ def detect_nearby_places_request(message: str) -> bool:
     if len(text) < 4:
         return False
     text_lower = text.lower()
+    for wrong, right in NEARBY_PLACES_TYPO_MAP:
+        text_lower = text_lower.replace(wrong, right)
     for trigger in NEARBY_PLACES_TRIGGER_PHRASES:
         if len(trigger) < 2:
             continue
