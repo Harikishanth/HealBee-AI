@@ -265,6 +265,23 @@ class HealBeeResponseGenerator:
             if reminder_set and reminder_set.get("title"):
                 title = (reminder_set.get("title") or "").strip()[:150]
                 parts.append("[The user asked to set a reminder. We have already added it to their Reminders page. The reminder title is: \"" + title + "\". You MUST acknowledge briefly in your response that the reminder has been set and that they can view or edit it in the Reminders page. Respond in the same language as the user's query.]")
+            # Nearby hospitals/clinics: user asked for nearby places; we have results (within 10 km) from their location
+            nearby_places = session_context.get("nearby_places") or []
+            if nearby_places:
+                place_lines = []
+                for i, p in enumerate(nearby_places[:8], 1):
+                    name = (p.get("name") or "—").strip()
+                    address = (p.get("address") or "—").strip()[:200]
+                    phone = (p.get("phone") or "").strip()
+                    website = (p.get("website") or "").strip()[:80]
+                    line = f"{i}. {name} | Address: {address}"
+                    if phone:
+                        line += f" | Phone: {phone}"
+                    if website:
+                        line += f" | Website: {website}"
+                    place_lines.append(line)
+                places_text = "\n".join(place_lines)
+                parts.append("[The user asked for nearby hospitals/clinics. Here are the results (within 10 km from their location). You MUST include this list in your response in the user's language. For each place give: name, address, phone number (if available), and website (if available). Be concise and clear.]\n" + places_text)
             if parts:
                 user_content += "\n\n[Session context – use only for continuity and follow-up, e.g. 'Last time you mentioned…'; do not diagnose from this alone.]\n" + "\n".join(parts)
 

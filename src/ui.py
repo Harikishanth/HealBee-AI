@@ -22,10 +22,11 @@ try:
     from src.audio_capture import AudioCleaner
     from src.utils import HealBeeUtilities, get_relevant_journal_entries
     try:
-        from src.utils import detect_and_extract_reminder, detect_and_extract_journal
+        from src.utils import detect_and_extract_reminder, detect_and_extract_journal, detect_nearby_places_request
     except ImportError:
         detect_and_extract_reminder = lambda msg: None  # fallback if utils.py is older
         detect_and_extract_journal = lambda msg: None
+        detect_nearby_places_request = lambda msg: False
     from src.supabase_client import (
         is_supabase_configured,
         auth_sign_in,
@@ -65,10 +66,11 @@ except ImportError:
     from src.audio_capture import AudioCleaner
     from src.utils import HealBeeUtilities, get_relevant_journal_entries
     try:
-        from src.utils import detect_and_extract_reminder, detect_and_extract_journal
+        from src.utils import detect_and_extract_reminder, detect_and_extract_journal, detect_nearby_places_request
     except ImportError:
         detect_and_extract_reminder = lambda msg: None  # fallback if utils.py is older
         detect_and_extract_journal = lambda msg: None
+        detect_nearby_places_request = lambda msg: False
     try:
         from src.supabase_client import (
             is_supabase_configured,
@@ -1262,6 +1264,51 @@ def main_ui():
             st.session_state.user_gps_lat = None
         if "user_gps_lon" not in st.session_state:
             st.session_state.user_gps_lon = None
+        if "pending_nearby_request" not in st.session_state:
+            st.session_state.pending_nearby_request = False
+        # When URL has ?lat=&lon= (user shared location), fetch nearby places and add to chat if pending
+        try:
+            _qp = getattr(st, "query_params", None)
+            if _qp is None:
+                _qp = getattr(st, "experimental_get_query_params", lambda: {})()
+            _lat_s = (_qp.get("lat") or [""])[0] if isinstance(_qp.get("lat"), list) else (_qp.get("lat") or "")
+            _lon_s = (_qp.get("lon") or [""])[0] if isinstance(_qp.get("lon"), list) else (_qp.get("lon") or "")
+            if _lat_s and _lon_s:
+                _lat_f, _lon_f = float(_lat_s), float(_lon_s)
+                if -90 <= _lat_f <= 90 and -180 <= _lon_f <= 180:
+                    st.session_state.user_gps_lat = _lat_f
+                    st.session_state.user_gps_lon = _lon_f
+                    _hints = get_condition_hints_from_symptoms(st.session_state.get("extracted_symptoms") or [])
+                    _places = search_nearby_by_gps(_lat_f, _lon_f, radius_m=10000, condition_hints=_hints, limit=6)
+                    st.session_state.nearby_chat_results = _places
+                    if st.session_state.get("pending_nearby_request"):
+                        _util_np = _get_utils(SARVAM_API_KEY)
+                        _user_lang_np = st.session_state.get("current_language_code") or "en-IN"
+                        def _np_t(s: str) -> str:
+                            if not _util_np or _user_lang_np == "en-IN":
+                                return s
+                            try:
+                                return _util_np.translate_text(s, _user_lang_np) or s
+                            except Exception:
+                                return s
+                        _lines = [_np_t("Here are hospitals/clinics within 10 km of your location:")]
+                        for _p in (st.session_state.nearby_chat_results or []):
+                            _name = (_p.get("name") or "—").replace("<", "&lt;").replace(">", "&gt;")
+                            _addr = (_p.get("address") or "—")[:150].replace("<", "&lt;").replace(">", "&gt;")
+                            _phone = (_p.get("phone") or "").strip()
+                            _web = (_p.get("website") or "").strip()
+                            _line = f"• **{_name}** — {_addr}"
+                            if _phone:
+                                _line += f" — {_np_t('Phone')}: {_phone}"
+                            if _web:
+                                _line += f" — {_np_t('Website')}: {_web[:50]}"
+                            _lines.append(_line)
+                        _msg = "\n\n".join(_lines)
+                        add_message_to_conversation("assistant", _msg)
+                        _persist_message_to_db("assistant", _msg)
+                        st.session_state.pending_nearby_request = False
+        except Exception:
+            pass
         if False:  # hospital finder moved to Maps page
             if st.session_state.near_me_results:
                 st.markdown(f"**Results for “{st.session_state.near_me_query}”**")
@@ -1383,6 +1430,53 @@ def main_ui():
                         _save_health_context_to_memory()
                         st.session_state.voice_input_stage = None
                         return
+
+                    # Nearby hospitals/clinics: only when user explicitly asks (any language)
+                    if detect_nearby_places_request(user_query_text):
+                        _lat = st.session_state.get("user_gps_lat")
+                        _lon = st.session_state.get("user_gps_lon")
+                        if _lat is not None and _lon is not None:
+                            _hints = get_condition_hints_from_symptoms(st.session_state.get("extracted_symptoms") or [])
+                            _places = search_nearby_by_gps(_lat, _lon, radius_m=10000, condition_hints=_hints, limit=6)
+                            st.session_state.nearby_chat_results = _places
+                            journal_entries = st.session_state.get("journal_entries") or []
+                            relevant_journal = get_relevant_journal_entries(user_query_text, journal_entries, max_entries=5)
+                            session_context = {
+                                "extracted_symptoms": list(st.session_state.extracted_symptoms),
+                                "follow_up_answers": list(st.session_state.follow_up_answers),
+                                "last_advice_given": (st.session_state.last_advice_given or "")[:800],
+                                "user_profile": dict(st.session_state.user_profile) if st.session_state.get("user_profile") else None,
+                                "user_memory": dict(st.session_state.persistent_memory) if st.session_state.get("persistent_memory") else None,
+                                "past_messages": [],
+                                "relevant_journal_entries": relevant_journal,
+                                "nearby_places": _places,
+                            }
+                            if is_supabase_configured() and st.session_state.get("supabase_session") and st.session_state.get("current_chat_id"):
+                                try:
+                                    uid = st.session_state.supabase_session.get("user_id")
+                                    session_context["past_messages"] = get_recent_messages_from_other_chats(uid, st.session_state.current_chat_id, limit=8)
+                                except Exception:
+                                    pass
+                            bot_response = response_gen.generate_response(user_query_text, nlu_output, session_context=session_context)
+                            translated_bot_response = util.translate_text(bot_response, user_lang)
+                            add_message_to_conversation("assistant", translated_bot_response)
+                            _persist_message_to_db("assistant", translated_bot_response)
+                            st.session_state.last_advice_given = translated_bot_response[:800]
+                            st.session_state.symptom_checker_active = False
+                            _save_health_context_to_memory()
+                            st.session_state.voice_input_stage = None
+                            return
+                        else:
+                            st.session_state.pending_nearby_request = True
+                            fixed_msg_en = "To find hospitals and clinics near you (within 10 km), I need your location. Click the button below to share it. Your location is not stored."
+                            translated_bot_response = util.translate_text(fixed_msg_en, user_lang) if user_lang != "en-IN" else fixed_msg_en
+                            add_message_to_conversation("assistant", translated_bot_response)
+                            _persist_message_to_db("assistant", translated_bot_response)
+                            st.session_state.last_advice_given = translated_bot_response[:800]
+                            st.session_state.symptom_checker_active = False
+                            _save_health_context_to_memory()
+                            st.session_state.voice_input_stage = None
+                            return
 
                     # Use symptom checker when NLU says symptom_query, or when the message clearly
                     # describes symptoms (fever, cough, etc.) and is not a reminder request.
@@ -1713,94 +1807,39 @@ def main_ui():
 
             st.markdown("<p class='healbee-disclaimer'>This is general guidance only, not a diagnosis. When in doubt, see a doctor.</p>", unsafe_allow_html=True)
             st.markdown("<div style='height: 8px;'></div>", unsafe_allow_html=True)
-
-            # --- Nearby hospitals/clinics by GPS (in user's chat language, within 10 km) ---
-            if len(st.session_state.get("conversation") or []) >= 1:
-                _user_lang = st.session_state.get("current_language_code") or "en-IN"
-                _util_nearby = _get_utils(SARVAM_API_KEY)
-                def _nearby_t(s: str) -> str:
-                    if not _util_nearby or _user_lang == "en-IN":
+            if st.session_state.get("pending_nearby_request"):
+                _nplang = st.session_state.get("current_language_code") or "en-IN"
+                _nputil = _get_utils(SARVAM_API_KEY)
+                def _npt(s: str) -> str:
+                    if not _nputil or _nplang == "en-IN":
                         return s
                     try:
-                        return _util_nearby.translate_text(s, _user_lang) or s
+                        return _nputil.translate_text(s, _nplang) or s
                     except Exception:
                         return s
-                try:
-                    _qp = getattr(st, "query_params", None)
-                    if _qp is None:
-                        _qp = getattr(st, "experimental_get_query_params", lambda: {})()
-                    _lat_s = (_qp.get("lat") or [""])[0] if isinstance(_qp.get("lat"), list) else _qp.get("lat", "")
-                    _lon_s = (_qp.get("lon") or [""])[0] if isinstance(_qp.get("lon"), list) else _qp.get("lon", "")
-                    if _lat_s and _lon_s:
-                        _lat_f, _lon_f = float(_lat_s), float(_lon_s)
-                        if -90 <= _lat_f <= 90 and -180 <= _lon_f <= 180:
-                            _same = (st.session_state.user_gps_lat == _lat_f and st.session_state.user_gps_lon == _lon_f)
-                            if not _same:
-                                st.session_state.user_gps_lat = _lat_f
-                                st.session_state.user_gps_lon = _lon_f
-                                _hints = get_condition_hints_from_symptoms(st.session_state.get("extracted_symptoms") or [])
-                                _places = search_nearby_by_gps(_lat_f, _lon_f, radius_m=10000, condition_hints=_hints, limit=6)
-                                st.session_state.nearby_chat_results = _places
-                except Exception:
-                    pass
-                _expander_title = _nearby_t("Nearby hospitals/clinics for your concern (by your location)")
-                with st.expander(_expander_title, expanded=bool(st.session_state.get("nearby_chat_results"))):
-                    if st.session_state.get("nearby_chat_results"):
-                        st.caption(_nearby_t("Based on your conversation and your location (within 10 km). Call or visit the website to enquire. Data from OpenStreetMap."))
-                        _label_call = _nearby_t("Call")
-                        _label_website = _nearby_t("Website")
-                        _label_map = _nearby_t("Open map / directions")
-                        for i, p in enumerate(st.session_state.nearby_chat_results):
-                            name_raw = p.get("name") or "—"
-                            address_raw = (p.get("address") or "—")[:200]
-                            if _user_lang != "en-IN" and _util_nearby:
-                                try:
-                                    name_raw = _util_nearby.translate_text(name_raw, _user_lang) or name_raw
-                                    address_raw = _util_nearby.translate_text(address_raw, _user_lang) or address_raw
-                                except Exception:
-                                    pass
-                            name = name_raw.replace("<", "&lt;").replace(">", "&gt;")
-                            address = address_raw.replace("<", "&lt;").replace(">", "&gt;")
-                            phone = (p.get("phone") or "").strip()
-                            website = (p.get("website") or "").strip()
-                            lat, lon = p.get("lat"), p.get("lon")
-                            map_link = make_osm_link(str(lat or ""), str(lon or "")) if lat and lon else ""
-                            parts = [f"<strong>{name}</strong>", f"<span style='font-size:0.9rem;opacity:0.9;'>{address}</span>"]
-                            if phone:
-                                parts.append(f'{_label_call}: <a href="tel:{phone}">{phone}</a>')
-                            if website:
-                                wtext = website[:50] + ("…" if len(website) > 50 else "")
-                                parts.append(f'{_label_website}: <a href="{website}" target="_blank" rel="noopener">{wtext}</a>')
-                            if map_link:
-                                parts.append(f'<a href="{map_link}" target="_blank" rel="noopener">{_label_map}</a>')
-                            card_html = "<div class='healbee-card' style='margin-bottom:0.75rem;'><p style='margin:0 0 0.25rem 0;'>" + "</p><p style='margin:0.25rem 0;'>".join(parts) + "</p></div>"
-                            st.markdown(card_html, unsafe_allow_html=True)
-                    else:
-                        st.caption(_nearby_t("Use your device location to see 5–6 nearby hospitals/clinics (within 10 km) relevant to your concern. Your location is not stored."))
-                        _btn_text = _nearby_t("Use my location and find nearby places")
-                        _alert_no_geo = _nearby_t("Geolocation not supported")
-                        _alert_no_loc = _nearby_t("Could not get location. Allow location access and try again.")
-                        _btn_esc = _btn_text.replace("'", "\\'").replace('"', '\\"')
-                        _alert_no_geo_esc = _alert_no_geo.replace("'", "\\'").replace("\n", " ")
-                        _alert_no_loc_esc = _alert_no_loc.replace("'", "\\'").replace("\n", " ")
-                        _gps_html = f"""
-                        <script>
-                        function useLocation() {{
-                            if (!navigator.geolocation) {{ alert('{_alert_no_geo_esc}'); return; }}
-                            navigator.geolocation.getCurrentPosition(
-                                function(pos) {{
-                                    var u = window.location.origin + window.location.pathname + '?lat=' + pos.coords.latitude + '&lon=' + pos.coords.longitude;
-                                    window.location.href = u;
-                                }},
-                                function() {{ alert('{_alert_no_loc_esc}'); }}
-                            );
-                        }}
-                        </script>
-                        <button onclick="useLocation()" style="padding: 0.5rem 1rem; background: #0d9488; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 1rem;">{_btn_esc}</button>
-                        """
-                        components.html(_gps_html, height=60, scrolling=False)
-
-            st.markdown("<div style='height: 8px;'></div>", unsafe_allow_html=True)
+                _nearby_btn_text = _npt("Use my location and find nearby places")
+                _alert_geo = _npt("Geolocation not supported")
+                _alert_loc = _npt("Could not get location. Allow location access and try again.")
+                _btn_esc = _nearby_btn_text.replace("'", "\\'").replace('"', '\\"')
+                _alert_geo_esc = _alert_geo.replace("'", "\\'").replace("\n", " ")
+                _alert_loc_esc = _alert_loc.replace("'", "\\'").replace("\n", " ")
+                _gps_html = f"""
+                <script>
+                function useLocation() {{
+                    if (!navigator.geolocation) {{ alert('{_alert_geo_esc}'); return; }}
+                    navigator.geolocation.getCurrentPosition(
+                        function(pos) {{
+                            var u = window.location.origin + window.location.pathname + '?lat=' + pos.coords.latitude + '&lon=' + pos.coords.longitude;
+                            window.location.href = u;
+                        }},
+                        function() {{ alert('{_alert_loc_esc}'); }}
+                    );
+                }}
+                </script>
+                <button onclick="useLocation()" style="padding: 0.5rem 1rem; background: #0d9488; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 1rem;">{_btn_esc}</button>
+                """
+                components.html(_gps_html, height=60, scrolling=False)
+                st.markdown("<div style='height: 8px;'></div>", unsafe_allow_html=True)
             is_recording = st.session_state.voice_input_stage == "recording"
 
             if st.session_state.symptom_checker_active and st.session_state.pending_symptom_question_data:

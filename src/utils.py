@@ -584,3 +584,77 @@ def detect_and_extract_journal(message: str) -> Optional[Dict[str, str]]:
     first_line = content.split("\n")[0].strip() if content else ""
     title = (first_line[:80] if first_line else content[:80] or "Note from chat").strip()
     return {"title": title, "content": content}
+
+
+# --- Nearby hospitals/clinics: detect "find nearby hospitals" from chat (multilingual) ---
+NEARBY_PLACES_TRIGGER_PHRASES = [
+    # English
+    "find nearby hospitals",
+    "find nearby clinics",
+    "nearby hospitals",
+    "nearby clinics",
+    "hospitals near me",
+    "clinics near me",
+    "find hospitals near me",
+    "find clinics near me",
+    "where are the nearest hospitals",
+    "where are the nearest clinics",
+    "nearest hospital",
+    "nearest clinic",
+    "hospitals within 10 km",
+    "clinics within 10 km",
+    "show me nearby hospitals",
+    "show me nearby clinics",
+    "list nearby hospitals",
+    "list nearby clinics",
+    # Hindi (romanized / Devanagari)
+    "paas ke hospital",
+    "paas ke clinic",
+    "nazdeek hospital",
+    "nazdeek clinic",
+    "मेरे पास अस्पताल",
+    "नजदीकी अस्पताल",
+    "नजदीकी क्लिनिक",
+    # Tamil
+    "அருகிலுள்ள மருத்துவமனை",
+    "அருகிலுள்ள கிளினிக்",
+    "பெரும்பாலான மருத்துவமனைகள்",
+    # Malayalam
+    "അടുത്തുള്ള ആശുപത്രി",
+    "അടുത്തുള്ള ക്ലിനിക്",
+    # Telugu
+    "దగ్గరి హాస్పిటల్",
+    "దగ్గరి క్లినిక్",
+    # Kannada
+    "ಹತ್ತಿರದ ಆಸ್ಪತ್ರೆ",
+    "ಹತ್ತಿರದ ಕ್ಲಿನಿಕ್",
+    # Marathi
+    "जवळचे रुग्णालय",
+    "जवळचे क्लिनिक",
+    # Bengali
+    "কাছের হাসপাতাল",
+    "কাছের ক্লিনিক",
+]
+
+
+def detect_nearby_places_request(message: str) -> bool:
+    """
+    Detect if the user is explicitly asking to find nearby hospitals or clinics.
+    Returns True if the message clearly requests nearby hospitals/clinics (in any supported language).
+    """
+    if not message or not isinstance(message, str):
+        return False
+    text = message.strip()
+    if len(text) < 4:
+        return False
+    text_lower = text.lower()
+    for trigger in NEARBY_PLACES_TRIGGER_PHRASES:
+        if len(trigger) < 2:
+            continue
+        if trigger.isascii():
+            if trigger.lower() in text_lower:
+                return True
+        else:
+            if trigger in text:
+                return True
+    return False
