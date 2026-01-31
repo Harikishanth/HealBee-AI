@@ -1305,6 +1305,46 @@ def main_ui():
                         if s and s not in st.session_state.extracted_symptoms:
                             st.session_state.extracted_symptoms.append(s)
 
+                    # Check for reminder request first (even if NLU classified as symptom). If user clearly asks to set a reminder, handle it and skip symptom checker / LLM.
+                    reminder_just_set = None
+                    try:
+                        extracted = detect_and_extract_reminder(user_query_text)
+                        if extracted and extracted.get("title"):
+                            title = extracted["title"].strip()[:200]
+                            note = (extracted.get("note") or "").strip()[:300]
+                            now = datetime.now()
+                            when_dt = now.replace(hour=20, minute=0, second=0, microsecond=0)
+                            if when_dt <= now:
+                                when_dt = when_dt + timedelta(days=1)
+                            when_iso = when_dt.isoformat()
+                            uid = st.session_state.supabase_session.get("user_id") if st.session_state.get("supabase_session") else None
+                            if is_supabase_configured() and uid:
+                                rid = db_reminder_insert(uid, title, when_iso, note, False)
+                                if rid is not None:
+                                    st.session_state.reminders = db_reminders_list(uid)
+                                else:
+                                    reminders_list = st.session_state.get("reminders") or []
+                                    reminders_list.append({"id": f"rem_chat_{len(reminders_list)}_{now.timestamp()}", "title": title, "when_iso": when_iso, "note": note, "done": False})
+                                    st.session_state.reminders = reminders_list
+                            else:
+                                reminders_list = st.session_state.get("reminders") or []
+                                reminders_list.append({"id": f"rem_chat_{len(reminders_list)}_{now.timestamp()}", "title": title, "when_iso": when_iso, "note": note, "done": False})
+                                st.session_state.reminders = reminders_list
+                            reminder_just_set = {"title": title}
+                    except Exception:
+                        reminder_just_set = None
+                    if reminder_just_set and reminder_just_set.get("title"):
+                        _title = reminder_just_set["title"]
+                        fixed_msg_en = f"I've set a reminder for \"{_title}\". You can view or edit it in the Reminders page."
+                        translated_bot_response = util.translate_text(fixed_msg_en, user_lang) if user_lang != "en-IN" else fixed_msg_en
+                        add_message_to_conversation("assistant", translated_bot_response)
+                        _persist_message_to_db("assistant", translated_bot_response)
+                        st.session_state.last_advice_given = translated_bot_response[:800]
+                        st.session_state.symptom_checker_active = False
+                        _save_health_context_to_memory()
+                        st.session_state.voice_input_stage = None
+                        return
+
                     if nlu_output.intent == HealthIntent.SYMPTOM_QUERY and not nlu_output.is_emergency:
                         st.session_state.symptom_checker_active = True
                         st.session_state.symptom_checker_instance = SymptomChecker(nlu_result=nlu_output, api_key=SARVAM_API_KEY)
@@ -1320,69 +1360,30 @@ def main_ui():
                         else:
                             generate_and_display_assessment()
                     else:
-                        # Auto-create reminder from chat when user says e.g. "Set a reminder for medicine" (any of 8 languages)
-                        reminder_just_set = None
-                        try:
-                            extracted = detect_and_extract_reminder(user_query_text)
-                            if extracted and extracted.get("title"):
-                                title = extracted["title"].strip()[:200]
-                                note = (extracted.get("note") or "").strip()[:300]
-                                now = datetime.now()
-                                when_dt = now.replace(hour=20, minute=0, second=0, microsecond=0)
-                                if when_dt <= now:
-                                    when_dt = when_dt + timedelta(days=1)
-                                when_iso = when_dt.isoformat()
-                                uid = st.session_state.supabase_session.get("user_id") if st.session_state.get("supabase_session") else None
-                                if is_supabase_configured() and uid:
-                                    rid = db_reminder_insert(uid, title, when_iso, note, False)
-                                    if rid is not None:
-                                        st.session_state.reminders = db_reminders_list(uid)
-                                    else:
-                                        reminders_list = st.session_state.get("reminders") or []
-                                        reminders_list.append({"id": f"rem_chat_{len(reminders_list)}_{now.timestamp()}", "title": title, "when_iso": when_iso, "note": note, "done": False})
-                                        st.session_state.reminders = reminders_list
-                                else:
-                                    reminders_list = st.session_state.get("reminders") or []
-                                    reminders_list.append({"id": f"rem_chat_{len(reminders_list)}_{now.timestamp()}", "title": title, "when_iso": when_iso, "note": note, "done": False})
-                                    st.session_state.reminders = reminders_list
-                                reminder_just_set = {"title": title}
-                        except Exception:
-                            reminder_just_set = None
-                        # Fixed reply when reminder was set (so AI doesn't say "I can't do that")
-                        if reminder_just_set and reminder_just_set.get("title"):
-                            _title = reminder_just_set["title"]
-                            fixed_msg_en = f"I've set a reminder for \"{_title}\". You can view or edit it in the Reminders page."
-                            translated_bot_response = util.translate_text(fixed_msg_en, user_lang) if user_lang != "en-IN" else fixed_msg_en
-                            add_message_to_conversation("assistant", translated_bot_response)
-                            _persist_message_to_db("assistant", translated_bot_response)
-                            st.session_state.last_advice_given = translated_bot_response[:800]
-                            st.session_state.symptom_checker_active = False
-                            _save_health_context_to_memory()
-                        else:
-                            journal_entries = st.session_state.get("journal_entries") or []
-                            relevant_journal = get_relevant_journal_entries(user_query_text, journal_entries, max_entries=5)
-                            session_context = {
-                                "extracted_symptoms": list(st.session_state.extracted_symptoms),
-                                "follow_up_answers": list(st.session_state.follow_up_answers),
-                                "last_advice_given": (st.session_state.last_advice_given or "")[:800],
-                                "user_profile": dict(st.session_state.user_profile) if st.session_state.get("user_profile") else None,
-                                "user_memory": dict(st.session_state.persistent_memory) if st.session_state.get("persistent_memory") else None,
-                                "past_messages": [],
-                                "relevant_journal_entries": relevant_journal,
-                            }
-                            if is_supabase_configured() and st.session_state.get("supabase_session") and st.session_state.get("current_chat_id"):
-                                try:
-                                    uid = st.session_state.supabase_session.get("user_id")
-                                    session_context["past_messages"] = get_recent_messages_from_other_chats(uid, st.session_state.current_chat_id, limit=8)
-                                except Exception:
-                                    pass
-                            bot_response = response_gen.generate_response(user_query_text, nlu_output, session_context=session_context)
-                            translated_bot_response = util.translate_text(bot_response, user_lang)
-                            add_message_to_conversation("assistant", translated_bot_response)
-                            _persist_message_to_db("assistant", translated_bot_response)
-                            st.session_state.last_advice_given = translated_bot_response[:800]
-                            st.session_state.symptom_checker_active = False
-                            _save_health_context_to_memory()
+                        journal_entries = st.session_state.get("journal_entries") or []
+                        relevant_journal = get_relevant_journal_entries(user_query_text, journal_entries, max_entries=5)
+                        session_context = {
+                            "extracted_symptoms": list(st.session_state.extracted_symptoms),
+                            "follow_up_answers": list(st.session_state.follow_up_answers),
+                            "last_advice_given": (st.session_state.last_advice_given or "")[:800],
+                            "user_profile": dict(st.session_state.user_profile) if st.session_state.get("user_profile") else None,
+                            "user_memory": dict(st.session_state.persistent_memory) if st.session_state.get("persistent_memory") else None,
+                            "past_messages": [],
+                            "relevant_journal_entries": relevant_journal,
+                        }
+                        if is_supabase_configured() and st.session_state.get("supabase_session") and st.session_state.get("current_chat_id"):
+                            try:
+                                uid = st.session_state.supabase_session.get("user_id")
+                                session_context["past_messages"] = get_recent_messages_from_other_chats(uid, st.session_state.current_chat_id, limit=8)
+                            except Exception:
+                                pass
+                        bot_response = response_gen.generate_response(user_query_text, nlu_output, session_context=session_context)
+                        translated_bot_response = util.translate_text(bot_response, user_lang)
+                        add_message_to_conversation("assistant", translated_bot_response)
+                        _persist_message_to_db("assistant", translated_bot_response)
+                        st.session_state.last_advice_given = translated_bot_response[:800]
+                        st.session_state.symptom_checker_active = False
+                        _save_health_context_to_memory()
             except Exception as e:
                 st.error("Something went wrong while processing your message. Please try again or rephrase your question.")
                 add_message_to_conversation("system", "Sorry, an error occurred while processing your request. Please try rephrasing or try again later.")

@@ -384,6 +384,15 @@ def get_relevant_journal_entries(user_message: str, journal_entries: List[Dict[s
 # Reminder text is stored as-is in the user's language (no translation).
 REMINDER_TRIGGER_PHRASES = [
     # English
+    "set a medication reminder for",
+    "set medication reminder for",
+    "medication reminder for",
+    "i want to set a reminder for",
+    "i'd like to set a reminder for",
+    "can you set a reminder for",
+    "could you set a reminder for",
+    "can you remind me to",
+    "could you remind me to",
     "set a reminder for",
     "set reminder for",
     "remind me to",
