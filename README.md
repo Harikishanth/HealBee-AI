@@ -430,7 +430,7 @@ On Streamlit Cloud, browser-based voice works; local `sounddevice` is optional a
 | Role | Name |
 |------|------|
 | **Author** | **Hari Kishanth R** |
-| **Contributors** | Vishnu Prasaath S, Madheshwaran B, Kristen Sagayaraj V|
+| **Contributors** | Vishnu Prasaath S , Madheshwaran B , Kristen Sagayaraj V|
 
 **License:** See **LICENSE** in the repository.
 
