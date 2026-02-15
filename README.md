@@ -6,7 +6,7 @@
 |---|---|
 | **Web App** | **HealBee** |
 | **Author** | **Hari Kishanth R** |
-| **Contributors** | Vishnu Prasaath S, Madheshwaran B, Kristen Sagayaraj V|
+| **Contributors** | *Vishnu Prasaath S, Madheshwaran B, Kristen Sagayaraj V*|
 
 [![Launch App](https://img.shields.io/badge/Launch_App-brightgreen?logo=streamlit&style=for-the-badge)](https://healbee-ai.streamlit.app/)
 
